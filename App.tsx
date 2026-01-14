@@ -65,6 +65,10 @@ export default function App() {
   // Sell modal state
   const [showSellModal, setShowSellModal] = useState(false);
 
+  // Cooperation request modal (human asking AI for help)
+  const [showCoopModal, setShowCoopModal] = useState(false);
+  const [coopResult, setCoopResult] = useState<{ accepted: boolean; supporter: string; amount: number } | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll logs
@@ -600,6 +604,81 @@ export default function App() {
     }, 500);
   };
 
+  // --- Human Rat Race player requesting cooperation from AI Fast Track players ---
+  const requestCooperation = () => {
+    if (!currentPlayer || isFastTrack) return;
+
+    // Find AI Fast Track players who could help
+    const aiFastTrackPlayers = gameState.players.filter(p =>
+      p.type === 'AI' && p.hasEscaped && p.cash >= 200
+    );
+
+    if (aiFastTrackPlayers.length === 0) {
+      addLog('協力できる投資家がいません...');
+      setShowCoopModal(false);
+      return;
+    }
+
+    // Each AI decides based on personality and cash
+    let bestSupporter: typeof aiFastTrackPlayers[0] | null = null;
+    let supportAmount = 0;
+
+    for (const ai of aiFastTrackPlayers) {
+      const behavior = ai.aiBehavior;
+      if (!behavior) continue;
+
+      // Decision based on personality and cash
+      const supportChance = behavior.supportChance || 0.5;
+      const cashRatio = ai.cash / 5000; // More cash = more willing to help
+      const finalChance = supportChance * (0.5 + cashRatio * 0.5);
+
+      if (Math.random() < finalChance) {
+        // AI agrees to help - amount based on personality
+        const baseAmount = behavior.personality === 'charitable' ? 400 :
+                          behavior.personality === 'balanced' ? 300 :
+                          behavior.personality === 'cautious' ? 200 : 250;
+        const amount = Math.min(baseAmount, Math.floor(ai.cash * 0.3));
+
+        if (amount > supportAmount) {
+          bestSupporter = ai;
+          supportAmount = amount;
+        }
+      }
+    }
+
+    if (bestSupporter && supportAmount > 0) {
+      // AI accepted - transfer cash
+      setGameState(prev => {
+        const updatedPlayers = [...prev.players];
+        const supporter = updatedPlayers.find(p => p.id === bestSupporter!.id);
+        const receiver = updatedPlayers[prev.currentPlayerIndex];
+
+        if (supporter && receiver) {
+          supporter.cash -= supportAmount;
+          receiver.cash += supportAmount;
+        }
+
+        return { ...prev, players: updatedPlayers };
+      });
+
+      showAiSpeech(bestSupporter.name, getRandomDialog('support'));
+      addLog(`${bestSupporter.name}が${currentPlayer.name}に¥${supportAmount}を協力しました！`);
+      setCoopResult({ accepted: true, supporter: bestSupporter.name, amount: supportAmount });
+    } else {
+      // All AI declined
+      const decliner = aiFastTrackPlayers[Math.floor(Math.random() * aiFastTrackPlayers.length)];
+      showAiSpeech(decliner.name, getRandomDialog('pass'));
+      addLog(`${decliner.name}は協力を断りました...`);
+      setCoopResult({ accepted: false, supporter: decliner.name, amount: 0 });
+    }
+
+    // Close modal after showing result
+    setTimeout(() => {
+      setShowCoopModal(false);
+      setCoopResult(null);
+    }, 2500);
+  };
+
   // --- Sell Asset ---
   const handleSellAsset = (assetId: string) => {
     setGameState(prev => {
@@ -976,6 +1055,16 @@ export default function App() {
                       売却
                     </button>
                   )}
+                  {/* Cooperation button for Rat Race players */}
+                  {!isFastTrack && fastTrackPlayers.length > 0 && (
+                    <button
+                      onClick={() => setShowCoopModal(true)}
+                      className="px-2 py-1.5 text-xs bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 font-medium"
+                    >
+                      協力
+                    </button>
+                  )}
+                  {/* Support button for Fast Track players */}
                   {isFastTrack && ratRacePlayers.length > 0 && (
                     <button
                       onClick={initiateSupport}
@@ -1050,6 +1139,47 @@ export default function App() {
             <Button variant="outline" onClick={() => setShowSellModal(false)} className="w-full">
               戻る
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Cooperation Modal (Human asking AI for help) */}
+      {showCoopModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 animate-in zoom-in-95 duration-200">
+            {!coopResult ? (
+              <div className="text-center">
+                <div className="text-4xl mb-3">🤝</div>
+                <h3 className="text-lg font-bold text-slate-800 mb-2">協力を求める</h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  投資家に資金協力を求めますか？
+                </p>
+                <p className="text-xs text-slate-500 mb-4">
+                  相手の性格や所持金によって、OKしてくれるかどうかが変わります
+                </p>
+
+                <div className="space-y-2">
+                  <Button onClick={requestCooperation} className="w-full">
+                    協力を求める
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowCoopModal(false)} className="w-full">
+                    やめる
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="text-4xl mb-3">{coopResult.accepted ? '🎉' : '😢'}</div>
+                <h3 className="text-lg font-bold text-slate-800 mb-2">
+                  {coopResult.accepted ? '協力成功！' : '断られた...'}
+                </h3>
+                <p className="text-sm text-slate-600">
+                  {coopResult.accepted
+                    ? `${coopResult.supporter}が¥${coopResult.amount.toLocaleString()}を協力してくれました！`
+                    : `${coopResult.supporter}は今回は協力できないようです...`}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
