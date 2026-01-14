@@ -822,9 +822,31 @@ export default function App() {
       </header>
 
       {/* Popup Modal for Actions */}
-      {(gameState.phase === 'ROLL' || gameState.phase === 'DECISION' || gameState.phase === 'SUPPORT' || gameState.phase === 'END_TURN') && (
+      {(gameState.phase === 'ROLL' || gameState.phase === 'MOVE' || gameState.phase === 'DECISION' || gameState.phase === 'SUPPORT' || gameState.phase === 'END_TURN') && (
         <div className="fixed inset-0 bg-black/30 z-40 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 animate-in zoom-in-95 duration-200">
+
+            {gameState.phase === 'MOVE' && (
+              <div className="text-center">
+                <div className="text-5xl mb-3">
+                  {gameState.diceRoll === 1 && <Dice1 className="w-16 h-16 mx-auto text-blue-600" />}
+                  {gameState.diceRoll === 2 && <Dice2 className="w-16 h-16 mx-auto text-blue-600" />}
+                  {gameState.diceRoll === 3 && <Dice3 className="w-16 h-16 mx-auto text-blue-600" />}
+                  {gameState.diceRoll === 4 && <Dice4 className="w-16 h-16 mx-auto text-blue-600" />}
+                  {gameState.diceRoll === 5 && <Dice5 className="w-16 h-16 mx-auto text-blue-600" />}
+                  {gameState.diceRoll === 6 && <Dice6 className="w-16 h-16 mx-auto text-blue-600" />}
+                  {(gameState.diceRoll || 0) > 6 && (
+                    <span className="text-5xl font-bold text-blue-600">{gameState.diceRoll}</span>
+                  )}
+                </div>
+                <h2 className="text-lg font-bold text-slate-800 mb-1">
+                  {gameState.diceRoll} が出た！
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {currentPlayer?.name}が移動中...
+                </p>
+              </div>
+            )}
 
             {gameState.phase === 'ROLL' && (
               <div className="text-center">
