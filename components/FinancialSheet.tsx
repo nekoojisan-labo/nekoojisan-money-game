@@ -1,6 +1,6 @@
 import React from 'react';
 import { Player } from '../types';
-import { Wallet, TrendingUp, TrendingDown, PiggyBank, Building, Trophy } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, PiggyBank, Building, Trophy, Target, Dice1, Dice6 } from 'lucide-react';
 
 interface FinancialSheetProps {
   player: Player;
@@ -35,6 +35,32 @@ export const FinancialSheet: React.FC<FinancialSheetProps> = ({ player, isCurren
           <div className="flex items-center justify-center gap-2 text-xs font-bold text-amber-800">
             <span className="text-lg">🏎️</span>
             <span>ファーストトラック挑戦中！</span>
+          </div>
+        </div>
+      )}
+
+      {/* Life Goal Display */}
+      {player.selectedGoal && (
+        <div className={`px-3 py-2 border-b ${player.hasEscaped ? 'bg-purple-50 border-purple-100' : 'bg-slate-50 border-slate-100'}`}>
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5">
+              <Target className="w-3 h-3 text-purple-500" />
+              <span className="font-medium text-slate-600">目標:</span>
+              <span className="text-purple-600">{player.selectedGoal.icon} {player.selectedGoal.title}</span>
+            </div>
+            <span className={`font-bold ${player.cash >= player.selectedGoal.requiredCash ? 'text-green-600' : 'text-slate-400'}`}>
+              {player.cash >= player.selectedGoal.requiredCash ? '達成可能！' : `残り ${(player.selectedGoal.requiredCash - player.cash).toLocaleString()}`}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Charity Bonus Display */}
+      {player.charityTurnsRemaining > 0 && (
+        <div className="px-3 py-1 bg-pink-50 border-b border-pink-100">
+          <div className="flex items-center justify-center gap-2 text-xs text-pink-600 font-medium">
+            <span>🎲🎲</span>
+            <span>サイコロ2個ボーナス: 残り{player.charityTurnsRemaining}ターン</span>
           </div>
         </div>
       )}

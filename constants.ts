@@ -1,4 +1,43 @@
-import { GameCard, Player } from './types';
+import { GameCard, Player, LifeGoal } from './types';
+
+// Life Goals - Players choose one at game start
+export const LIFE_GOALS: LifeGoal[] = [
+  {
+    id: 'goal_travel',
+    title: '世界一周の旅',
+    description: '世界中を自由に旅して、様々な文化を体験する。',
+    icon: '✈️',
+    requiredCash: 100000,
+  },
+  {
+    id: 'goal_charity',
+    title: '学校を建てる',
+    description: '発展途上国に学校を建設し、子どもたちに教育を届ける。',
+    icon: '🏫',
+    requiredCash: 150000,
+  },
+  {
+    id: 'goal_forest',
+    title: '森を守る',
+    description: '広大な森林を購入し、自然環境を保護する。',
+    icon: '🌲',
+    requiredCash: 200000,
+  },
+  {
+    id: 'goal_island',
+    title: '南の島に別荘',
+    description: '美しいビーチのある島に別荘を建てて家族と過ごす。',
+    icon: '🏝️',
+    requiredCash: 80000,
+  },
+  {
+    id: 'goal_space',
+    title: '宇宙旅行',
+    description: '宇宙から地球を見下ろす体験をする。',
+    icon: '🚀',
+    requiredCash: 300000,
+  },
+];
 
 export const BOARD_SIZE = 12;
 
@@ -17,10 +56,13 @@ export const INITIAL_PLAYERS: Player[] = [
       { id: 'l2', name: '車のローン', totalAmount: 1000, monthlyPayment: 100 },
     ],
     dreams: [],
-    monthlyExpenses: 1200, 
+    monthlyExpenses: 1200,
     passiveIncome: 0,
     hasEscaped: false,
     position: 0,
+    selectedGoal: null,
+    charityTurnsRemaining: 0,
+    supportBonus: 0,
   },
   {
     id: 'p2',
@@ -37,6 +79,9 @@ export const INITIAL_PLAYERS: Player[] = [
     passiveIncome: 0,
     hasEscaped: false,
     position: 0,
+    selectedGoal: null,
+    charityTurnsRemaining: 0,
+    supportBonus: 0,
   },
   {
     id: 'p3',
@@ -53,6 +98,9 @@ export const INITIAL_PLAYERS: Player[] = [
     passiveIncome: 0,
     hasEscaped: false,
     position: 0,
+    selectedGoal: null,
+    charityTurnsRemaining: 0,
+    supportBonus: 0,
   },
   {
     id: 'p4',
@@ -69,6 +117,9 @@ export const INITIAL_PLAYERS: Player[] = [
     passiveIncome: 0,
     hasEscaped: false,
     position: 0,
+    selectedGoal: null,
+    charityTurnsRemaining: 0,
+    supportBonus: 0,
   },
 ];
 
@@ -239,3 +290,41 @@ export const FAST_TRACK_SPACES = [
   'BUSINESS',
   'PAYCHECK'
 ];
+
+// Charity cards - give to get special bonuses
+export const CHARITY_CARDS: GameCard[] = [
+  {
+    id: 'charity_1',
+    type: 'CHARITY',
+    title: '地域の子ども食堂に寄付',
+    description: '収入の10%を寄付すると、次の3ターン、サイコロを2個振れます！',
+    cost: 0, // Will be calculated as 10% of income
+    cashflow: 0,
+  },
+  {
+    id: 'charity_2',
+    type: 'CHARITY',
+    title: '環境保護団体への寄付',
+    description: '500を寄付すると、次の3ターン、サイコロを2個振れます！',
+    cost: 500,
+    cashflow: 0,
+  },
+];
+
+// Support options for Fast Track players to help Rat Race players
+export const SUPPORT_OPTIONS = {
+  JOB: {
+    title: '仕事を依頼する',
+    description: 'ラットレースのプレイヤーに仕事を依頼し、彼らに収入を与えます。',
+    costToInvestor: 1000,
+    benefitToWorker: 800,
+    benefitToInvestor: 200, // Passive income bonus
+  },
+  INVESTMENT: {
+    title: '共同投資を持ちかける',
+    description: '一緒に投資し、リターンを分配します。',
+    costToInvestor: 2000,
+    benefitToWorker: 500, // One-time cash
+    benefitToInvestor: 300, // Passive income
+  },
+};
