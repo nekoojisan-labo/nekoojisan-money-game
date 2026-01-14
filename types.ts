@@ -1,5 +1,14 @@
 export type PlayerType = 'HUMAN' | 'AI';
 
+// Life goals that players choose at game start
+export interface LifeGoal {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  requiredCash: number; // Cash needed to achieve this dream
+}
+
 export interface Asset {
   id: string;
   name: string;
@@ -36,6 +45,15 @@ export interface Player {
   
   hasEscaped: boolean; // True if on Fast Track
   position: number; // Board position 0-11
+
+  // Life goal selected at game start
+  selectedGoal: LifeGoal | null;
+
+  // Charity bonus: roll 2 dice for next N turns
+  charityTurnsRemaining: number;
+
+  // Support received from Fast Track players
+  supportBonus: number; // One-time bonus from other players
 }
 
 export type CardType = 'OPPORTUNITY' | 'DOODAD' | 'MARKET' | 'CHARITY' | 'PAYCHECK' | 'BUSINESS' | 'DREAM' | 'AUDIT';
@@ -57,7 +75,7 @@ export interface GameLog {
   timestamp: number;
 }
 
-export type GamePhase = 'SETUP' | 'ROLL' | 'MOVE' | 'ACTION' | 'DECISION' | 'END_TURN' | 'GAME_OVER';
+export type GamePhase = 'SETUP' | 'GOAL_SELECT' | 'ROLL' | 'MOVE' | 'ACTION' | 'DECISION' | 'SUPPORT' | 'END_TURN' | 'GAME_OVER';
 
 export interface GameState {
   players: Player[];
@@ -70,4 +88,11 @@ export interface GameState {
   winner: Player | null;
   isCoachLoading: boolean;
   coachMessage: string | null;
+
+  // Goal selection phase tracking
+  goalSelectingPlayerIndex: number;
+
+  // Support action (Fast Track player helping Rat Race player)
+  supportTargetId: string | null;
+  supportType: 'JOB' | 'INVESTMENT' | null;
 }
