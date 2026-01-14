@@ -44,13 +44,31 @@ export default function App() {
     }));
   };
 
+  // Helper: Check escape condition for a player
+  const checkEscapeCondition = (player: Player): boolean => {
+    return !player.hasEscaped && player.passiveIncome >= player.monthlyExpenses;
+  };
+
   // Helper: Next Phase
   const advanceTurn = () => {
     setGameState(prev => {
-      const nextIndex = (prev.currentPlayerIndex + 1) % prev.players.length;
+      const updatedPlayers = [...prev.players];
+      const currentIdx = prev.currentPlayerIndex;
+      const player = updatedPlayers[currentIdx];
+
+      // Double-check escape condition at turn end
+      if (checkEscapeCondition(player)) {
+        player.hasEscaped = true;
+        player.cash += 100000;
+        player.position = 0;
+        // Add log for escape (handled in setTimeout below)
+      }
+
+      const nextIndex = (currentIdx + 1) % prev.players.length;
       const nextTurnCount = nextIndex === 0 ? prev.turnCount + 1 : prev.turnCount;
       return {
         ...prev,
+        players: updatedPlayers,
         currentPlayerIndex: nextIndex,
         turnCount: nextTurnCount,
         phase: 'ROLL', // Reset to ROLL phase
@@ -190,8 +208,8 @@ export default function App() {
           player.assets.push(newAsset);
           player.passiveIncome += cashflow;
           
-          // Check Rat Race Escape Condition
-          if (!player.hasEscaped && player.passiveIncome > player.monthlyExpenses) {
+          // Check Rat Race Escape Condition (>= for consistency with 100% display)
+          if (!player.hasEscaped && player.passiveIncome >= player.monthlyExpenses) {
             player.hasEscaped = true;
             player.cash += 100000; // Bonus for escaping
             player.position = 0; // Reset position for Fast Track
@@ -204,7 +222,7 @@ export default function App() {
     if (gameState.currentCard.type === 'DREAM') {
         addLog(`🏆 ${currentPlayer.name} が夢を叶えてゲームに勝利しました！！`);
     } else {
-        if (!currentPlayer.hasEscaped && (currentPlayer.passiveIncome + cashflow) > currentPlayer.monthlyExpenses) {
+        if (!currentPlayer.hasEscaped && (currentPlayer.passiveIncome + cashflow) >= currentPlayer.monthlyExpenses) {
             addLog(`🎉 おめでとう！！ ${currentPlayer.name} はラットレースを脱出した！ ファーストトラックへ移動します！`);
         } else {
             addLog(`${currentPlayer.name}は「${gameState.currentCard.title}」を購入しました！(不労所得 +${cashflow})`);
