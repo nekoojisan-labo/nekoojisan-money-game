@@ -55,6 +55,7 @@ export default function App() {
     goalSelectingPlayerIndex: 0,
     supportTargetId: null,
     supportType: null,
+    supportRequest: null,
     eventMessage: null,
   });
 
@@ -135,6 +136,12 @@ export default function App() {
 
   // Get Rat Race players (for support actions)
   const ratRacePlayers = gameState.players.filter(p => !p.hasEscaped && p.id !== currentPlayer?.id);
+
+  // Get Fast Track players (for requesting support)
+  const fastTrackPlayers = gameState.players.filter(p => p.hasEscaped && p.id !== currentPlayer?.id);
+
+  // Check if human is on Fast Track (can respond to support requests)
+  const humanFastTrackPlayer = gameState.players.find(p => p.type === 'HUMAN' && p.hasEscaped);
 
   // --- Actions ---
 
@@ -539,6 +546,60 @@ export default function App() {
     setGameState(prev => ({ ...prev, phase: 'END_TURN' }));
   };
 
+  // --- Support Request Response (Human Fast Track player responding to AI request) ---
+  const acceptSupportRequest = (supportType: 'JOB' | 'INVESTMENT') => {
+    if (!gameState.supportRequest || !humanFastTrackPlayer) return;
+
+    const support = SUPPORT_OPTIONS[supportType];
+    if (humanFastTrackPlayer.cash < support.costToInvestor) {
+      addLog(`資金不足で支援できません！`);
+      declineSupportRequest();
+      return;
+    }
+
+    const requestingPlayerId = gameState.supportRequest.requestingPlayerId;
+    const requestingPlayer = gameState.players.find(p => p.id === requestingPlayerId);
+
+    setGameState(prev => {
+      const updatedPlayers = [...prev.players];
+      const investor = updatedPlayers.find(p => p.id === humanFastTrackPlayer.id)!;
+      const worker = updatedPlayers.find(p => p.id === requestingPlayerId);
+
+      if (!worker || !investor) return { ...prev, supportRequest: null };
+
+      investor.cash -= support.costToInvestor;
+      investor.passiveIncome += support.benefitToInvestor;
+
+      if (supportType === 'JOB') {
+        worker.supportBonus += support.benefitToWorker;
+      } else {
+        worker.cash += support.benefitToWorker;
+      }
+
+      return { ...prev, players: updatedPlayers, supportRequest: null };
+    });
+
+    if (supportType === 'JOB') {
+      addLog(`${humanFastTrackPlayer.name}が${requestingPlayer?.name}に仕事を依頼しました！`);
+    } else {
+      addLog(`${humanFastTrackPlayer.name}が${requestingPlayer?.name}と共同投資しました！`);
+    }
+    showAiSpeech(requestingPlayer?.name || '', getRandomDialog('acceptSupport'));
+
+    // AI continues their turn (roll dice)
+    setTimeout(() => {
+      rollDice();
+    }, 1500);
+  };
+
+  const declineSupportRequest = () => {
+    setGameState(prev => ({ ...prev, supportRequest: null }));
+    // AI continues their turn (roll dice)
+    setTimeout(() => {
+      rollDice();
+    }, 500);
+  };
+
   // --- Sell Asset ---
   const handleSellAsset = (assetId: string) => {
     setGameState(prev => {
@@ -590,7 +651,40 @@ export default function App() {
 
       if (gameState.phase === 'ROLL') {
         setTimeout(() => {
-          // Show catchphrase sometimes
+          const isAiFastTrack = currentPlayer.hasEscaped;
+          const requestChance = behavior?.requestSupportChance || 0.3;
+
+          // AI in Rat Race: Maybe request support from human Fast Track player
+          if (!isAiFastTrack && humanFastTrackPlayer && Math.random() < requestChance) {
+            showAiSpeech(currentPlayer.name, getRandomDialog('requestSupport'));
+            setGameState(prev => ({
+              ...prev,
+              supportRequest: {
+                requestingPlayerId: currentPlayer.id,
+                requestingPlayerName: currentPlayer.name,
+              }
+            }));
+            return; // Wait for human response
+          }
+
+          // AI in Fast Track: Maybe offer support before rolling
+          if (isAiFastTrack && ratRacePlayers.length > 0) {
+            const supportChance = behavior?.supportChance || 0.5;
+            if (Math.random() < supportChance) {
+              const target = ratRacePlayers[Math.floor(Math.random() * ratRacePlayers.length)];
+              const supportType = Math.random() > 0.5 ? 'JOB' : 'INVESTMENT';
+              const support = SUPPORT_OPTIONS[supportType];
+              if (currentPlayer.cash >= support.costToInvestor) {
+                showAiSpeech(currentPlayer.name, getRandomDialog('support'));
+                executeSupport(target.id, supportType);
+                // Then roll dice after support
+                setTimeout(() => rollDice(), 1500);
+                return;
+              }
+            }
+          }
+
+          // Normal roll
           if (behavior && Math.random() > 0.6) {
             showAiSpeech(currentPlayer.name, behavior.catchphrase);
           }
@@ -956,6 +1050,49 @@ export default function App() {
             <Button variant="outline" onClick={() => setShowSellModal(false)} className="w-full">
               戻る
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Support Request Modal (AI asking human for help) */}
+      {gameState.supportRequest && humanFastTrackPlayer && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 animate-in zoom-in-95 duration-200">
+            <div className="text-center">
+              <div className="text-4xl mb-3">🙏</div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">協力のお願い</h3>
+              <p className="text-sm text-slate-600 mb-4">
+                <span className="font-bold">{gameState.supportRequest.requestingPlayerName}</span>
+                があなたに協力を求めています
+              </p>
+
+              <div className="space-y-2 mb-4">
+                <button
+                  onClick={() => acceptSupportRequest('JOB')}
+                  disabled={humanFastTrackPlayer.cash < SUPPORT_OPTIONS.JOB.costToInvestor}
+                  className="w-full p-3 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50 font-medium"
+                >
+                  <div className="text-sm">仕事を依頼する</div>
+                  <div className="text-[10px] text-blue-500">
+                    -{SUPPORT_OPTIONS.JOB.costToInvestor} → 相手に給料日ボーナス
+                  </div>
+                </button>
+                <button
+                  onClick={() => acceptSupportRequest('INVESTMENT')}
+                  disabled={humanFastTrackPlayer.cash < SUPPORT_OPTIONS.INVESTMENT.costToInvestor}
+                  className="w-full p-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50 font-medium"
+                >
+                  <div className="text-sm">共同投資する</div>
+                  <div className="text-[10px] text-green-500">
+                    -{SUPPORT_OPTIONS.INVESTMENT.costToInvestor} → 相手に現金
+                  </div>
+                </button>
+              </div>
+
+              <Button variant="outline" onClick={declineSupportRequest} className="w-full">
+                今回はパス
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -36,22 +36,24 @@ export const DIFFICULTY_SETTINGS: DifficultySettings[] = [
 
 // AI Behavior patterns by personality
 export const AI_BEHAVIORS: Record<string, AIBehavior> = {
-  // エンジニア - 慎重で計算高い
+  // エンジニア - 慎重で計算高い、協力要請は控えめ
   engineer: {
     personality: 'cautious',
     buyThreshold: 0.4,
     charityChance: 0.2,
     riskTolerance: 0.3,
     supportChance: 0.5,
+    requestSupportChance: 0.2, // 自力でやりたい派
     catchphrase: 'データを分析してみると...',
   },
-  // 先生 - バランス型で寄付好き
+  // 先生 - バランス型で寄付好き、協力的
   teacher: {
     personality: 'charitable',
     buyThreshold: 0.5,
     charityChance: 0.7,
     riskTolerance: 0.4,
     supportChance: 0.8,
+    requestSupportChance: 0.6, // みんなで助け合い派
     catchphrase: '子どもたちのために使いたいな',
   },
   // デザイナー - 冒険的でトレンドに敏感
@@ -61,24 +63,27 @@ export const AI_BEHAVIORS: Record<string, AIBehavior> = {
     charityChance: 0.3,
     riskTolerance: 0.8,
     supportChance: 0.4,
+    requestSupportChance: 0.3, // 自分でやりたい派
     catchphrase: 'このチャンス、逃せない！',
   },
-  // 医者 - 安定重視
+  // 医者 - 安定重視、適度に協力を求める
   doctor: {
     personality: 'balanced',
     buyThreshold: 0.5,
     charityChance: 0.5,
     riskTolerance: 0.5,
     supportChance: 0.6,
+    requestSupportChance: 0.5, // バランス派
     catchphrase: '長期的な視点で考えよう',
   },
-  // 起業家 - ギャンブラー
+  // 起業家 - ギャンブラー、一人でやりたい
   entrepreneur: {
     personality: 'gambler',
     buyThreshold: 0.9,
     charityChance: 0.1,
     riskTolerance: 0.95,
     supportChance: 0.3,
+    requestSupportChance: 0.1, // 自力でビッグに！
     catchphrase: 'ビッグチャンス！全力で行く！',
   },
 };
@@ -249,6 +254,17 @@ export const AI_DIALOGS = {
     '仲間を助けよう',
     'みんなで成功しよう',
     '協力すれば強くなれる',
+  ],
+  requestSupport: [
+    '助けてください！',
+    '協力してもらえませんか？',
+    '一緒に頑張りましょう！',
+    '仲間の力を貸して！',
+  ],
+  acceptSupport: [
+    'ありがとう！',
+    '助かります！',
+    '感謝します！',
   ],
 };
 

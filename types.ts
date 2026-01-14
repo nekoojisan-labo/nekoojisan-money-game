@@ -23,6 +23,7 @@ export interface AIBehavior {
   charityChance: number; // % chance to donate when able
   riskTolerance: number; // 0-1, higher = more likely to buy expensive items
   supportChance: number; // % chance to support others when on Fast Track
+  requestSupportChance: number; // % chance to request support when in Rat Race
   catchphrase: string; // Character-specific dialog
 }
 
@@ -127,6 +128,12 @@ export interface GameState {
   // Support action (Fast Track player helping Rat Race player)
   supportTargetId: string | null;
   supportType: 'JOB' | 'INVESTMENT' | null;
+
+  // Support request from AI Rat Race player to human Fast Track player
+  supportRequest: {
+    requestingPlayerId: string;
+    requestingPlayerName: string;
+  } | null;
 
   // Special event message (for more engaging gameplay)
   eventMessage: string | null;
