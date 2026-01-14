@@ -853,135 +853,117 @@ export default function App() {
         </div>
       </header>
 
-      {/* Popup Modal for Actions */}
-      {(gameState.phase === 'ROLL' || gameState.phase === 'MOVE' || gameState.phase === 'DECISION' || gameState.phase === 'SUPPORT' || gameState.phase === 'END_TURN') && (
-        <div className="fixed inset-0 bg-black/30 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 animate-in zoom-in-95 duration-200">
-
-            {gameState.phase === 'MOVE' && (
-              <div className="text-center">
-                <div className="text-5xl mb-3">
-                  {gameState.diceRoll === 1 && <Dice1 className="w-16 h-16 mx-auto text-blue-600" />}
-                  {gameState.diceRoll === 2 && <Dice2 className="w-16 h-16 mx-auto text-blue-600" />}
-                  {gameState.diceRoll === 3 && <Dice3 className="w-16 h-16 mx-auto text-blue-600" />}
-                  {gameState.diceRoll === 4 && <Dice4 className="w-16 h-16 mx-auto text-blue-600" />}
-                  {gameState.diceRoll === 5 && <Dice5 className="w-16 h-16 mx-auto text-blue-600" />}
-                  {gameState.diceRoll === 6 && <Dice6 className="w-16 h-16 mx-auto text-blue-600" />}
-                  {(gameState.diceRoll || 0) > 6 && (
-                    <span className="text-5xl font-bold text-blue-600">{gameState.diceRoll}</span>
+      {/* Bottom Action Bar for ROLL phase (non-blocking) */}
+      {gameState.phase === 'ROLL' && !showSellModal && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t-2 border-blue-200 shadow-lg p-3">
+          <div className="max-w-lg mx-auto">
+            <div className="flex items-center justify-between gap-3">
+              {/* Current player info */}
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{currentPlayer?.avatar}</span>
+                <div>
+                  <div className="font-bold text-sm text-slate-700">
+                    {isHumanTurn ? 'あなたの番' : `${currentPlayer?.name}の番`}
+                  </div>
+                  {currentPlayer?.charityTurnsRemaining > 0 && (
+                    <span className="text-[10px] text-pink-600 font-bold">🎲🎲 ボーナス中</span>
                   )}
                 </div>
-                <h2 className="text-lg font-bold text-slate-800 mb-1">
-                  {gameState.diceRoll} が出た！
-                </h2>
-                <p className="text-sm text-slate-500">
-                  {currentPlayer?.name}が移動中...
-                </p>
               </div>
-            )}
 
-            {gameState.phase === 'ROLL' && !showSellModal && (
-              <div className="text-center">
-                <div className="text-5xl mb-3 animate-bounce">
-                  {currentPlayer?.charityTurnsRemaining > 0 ? '🎲🎲' : '🎲'}
+              {/* Action buttons */}
+              {isHumanTurn ? (
+                <div className="flex items-center gap-2">
+                  {currentPlayer?.assets && currentPlayer.assets.length > 0 && (
+                    <button
+                      onClick={() => setShowSellModal(true)}
+                      className="px-2 py-1.5 text-xs bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 font-medium"
+                    >
+                      売却
+                    </button>
+                  )}
+                  {isFastTrack && ratRacePlayers.length > 0 && (
+                    <button
+                      onClick={initiateSupport}
+                      className="px-2 py-1.5 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 font-medium"
+                    >
+                      支援
+                    </button>
+                  )}
+                  <Button size="lg" onClick={rollDice} className="px-6">
+                    🎲 サイコロを振る
+                  </Button>
                 </div>
-                <h2 className="text-lg font-bold text-slate-800 mb-1">
-                  {isHumanTurn ? 'あなたの番です' : `${currentPlayer?.name}の番`}
-                </h2>
-                {currentPlayer?.charityTurnsRemaining > 0 && (
-                  <p className="text-pink-600 text-xs font-bold mb-2">
-                    ❤️ サイコロ2個ボーナス (残り{currentPlayer.charityTurnsRemaining}ターン)
-                  </p>
-                )}
-                {isHumanTurn ? (
-                  <div className="space-y-2 mt-4">
-                    <Button size="lg" onClick={rollDice} className="w-full">
-                      {currentPlayer?.charityTurnsRemaining > 0 ? 'サイコロを振る！🎲🎲' : 'サイコロを振る 🎲'}
-                    </Button>
+              ) : (
+                <span className="text-sm text-slate-400 animate-pulse">考え中...</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-                    {/* Action Buttons */}
-                    <div className="grid grid-cols-2 gap-2">
-                      {isFastTrack && ratRacePlayers.length > 0 && (
-                        <Button variant="outline" onClick={initiateSupport} className="text-xs">
-                          <Handshake className="w-3 h-3 mr-1" /> 仲間を支援
-                        </Button>
-                      )}
-                      {currentPlayer?.assets && currentPlayer.assets.length > 0 && (
-                        <Button variant="outline" onClick={() => setShowSellModal(true)} className="text-xs">
-                          <TrendingUp className="w-3 h-3 mr-1" /> 資産を売却
-                        </Button>
-                      )}
-                    </div>
+      {/* Move notification (small toast) */}
+      {gameState.phase === 'MOVE' && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40">
+          <div className="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-in slide-in-from-top duration-200">
+            {gameState.diceRoll === 1 && <Dice1 className="w-5 h-5" />}
+            {gameState.diceRoll === 2 && <Dice2 className="w-5 h-5" />}
+            {gameState.diceRoll === 3 && <Dice3 className="w-5 h-5" />}
+            {gameState.diceRoll === 4 && <Dice4 className="w-5 h-5" />}
+            {gameState.diceRoll === 5 && <Dice5 className="w-5 h-5" />}
+            {gameState.diceRoll === 6 && <Dice6 className="w-5 h-5" />}
+            {(gameState.diceRoll || 0) > 6 && <span className="font-bold">{gameState.diceRoll}</span>}
+            <span className="font-bold text-sm">{gameState.diceRoll} が出た！</span>
+            <span className="text-xs opacity-80">{currentPlayer?.name}移動中...</span>
+          </div>
+        </div>
+      )}
 
-                    {/* Player Status Summary */}
-                    <div className="mt-3 p-2 bg-slate-50 rounded-lg text-left text-xs">
-                      <div className="flex justify-between mb-1">
-                        <span className="text-slate-500">所持金:</span>
-                        <span className="font-bold text-green-600">¥{currentPlayer?.cash.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-slate-500">不労所得:</span>
-                        <span className="font-bold text-blue-600">¥{currentPlayer?.passiveIncome.toLocaleString()}/月</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">支出:</span>
-                        <span className="font-bold text-red-500">¥{currentPlayer?.monthlyExpenses.toLocaleString()}/月</span>
-                      </div>
-                      {currentPlayer && !currentPlayer.hasEscaped && (
-                        <div className="mt-2 pt-2 border-t border-slate-200">
-                          <span className={`text-xs font-bold ${currentPlayer.passiveIncome >= currentPlayer.monthlyExpenses ? 'text-green-600' : 'text-slate-500'}`}>
-                            {currentPlayer.passiveIncome >= currentPlayer.monthlyExpenses
-                              ? '✓ 脱出条件クリア！'
-                              : `脱出まであと ¥${(currentPlayer.monthlyExpenses - currentPlayer.passiveIncome).toLocaleString()}/月`}
-                          </span>
+      {/* Sell Asset Modal (full modal when selling) */}
+      {showSellModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <TrendingUp className="w-5 h-5 text-amber-600" />
+              <h3 className="text-lg font-bold text-slate-800">資産を売却</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-3 text-center">売却価格は購入価格の80%です</p>
+
+            <div className="space-y-2 mb-4 max-h-[200px] overflow-y-auto">
+              {currentPlayer?.assets.map(asset => {
+                const sellPrice = Math.floor(asset.cost * 0.8);
+                return (
+                  <div key={asset.id} className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-left">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="font-bold text-sm">{asset.name}</div>
+                        <div className="text-[10px] text-slate-500">
+                          収入: +{asset.cashflow}/月
                         </div>
-                      )}
+                      </div>
+                      <button
+                        onClick={() => handleSellAsset(asset.id)}
+                        className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 font-bold"
+                      >
+                        ¥{sellPrice.toLocaleString()}で売却
+                      </button>
                     </div>
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-400 mt-3">考え中...</p>
-                )}
-              </div>
-            )}
+                );
+              })}
+            </div>
 
-            {/* Sell Asset Modal */}
-            {gameState.phase === 'ROLL' && showSellModal && (
-              <div className="text-center">
-                <div className="flex items-center justify-center gap-2 mb-3">
-                  <TrendingUp className="w-5 h-5 text-amber-600" />
-                  <h3 className="text-lg font-bold text-slate-800">資産を売却</h3>
-                </div>
-                <p className="text-xs text-slate-500 mb-3">売却価格は購入価格の80%です</p>
+            <Button variant="outline" onClick={() => setShowSellModal(false)} className="w-full">
+              戻る
+            </Button>
+          </div>
+        </div>
+      )}
 
-                <div className="space-y-2 mb-4 max-h-[200px] overflow-y-auto">
-                  {currentPlayer?.assets.map(asset => {
-                    const sellPrice = Math.floor(asset.cost * 0.8);
-                    return (
-                      <div key={asset.id} className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-left">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <div className="font-bold text-sm">{asset.name}</div>
-                            <div className="text-[10px] text-slate-500">
-                              収入: +{asset.cashflow}/月
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleSellAsset(asset.id)}
-                            className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 font-bold"
-                          >
-                            ¥{sellPrice.toLocaleString()}で売却
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <Button variant="outline" onClick={() => setShowSellModal(false)} className="w-full">
-                  戻る
-                </Button>
-              </div>
-            )}
+      {/* Popup Modal for DECISION, SUPPORT, END_TURN */}
+      {(gameState.phase === 'DECISION' || gameState.phase === 'SUPPORT' || gameState.phase === 'END_TURN') && (
+        <div className="fixed inset-0 bg-black/30 z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 animate-in zoom-in-95 duration-200">
 
             {gameState.phase === 'SUPPORT' && (
               <div className="text-center">
@@ -1121,7 +1103,7 @@ export default function App() {
       )}
 
       {/* Main Content - Always visible */}
-      <main className="max-w-7xl mx-auto p-3 grid grid-cols-1 lg:grid-cols-12 gap-3">
+      <main className="max-w-7xl mx-auto p-3 pb-20 grid grid-cols-1 lg:grid-cols-12 gap-3">
 
         {/* Left: Game Board */}
         <div className="lg:col-span-7">
