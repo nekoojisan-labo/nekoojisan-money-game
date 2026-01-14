@@ -500,6 +500,107 @@ export default function App() {
     setGameState(prev => ({ ...prev, phase: 'END_TURN' }));
   };
 
+  // --- Joint Purchase (共同購入) ---
+  const handleJointPurchase = () => {
+    if (!gameState.currentCard || !currentPlayer) return;
+
+    const cost = gameState.currentCard.cost || 0;
+    const cashflow = gameState.currentCard.cashflow || 0;
+    const shortage = cost - currentPlayer.cash;
+
+    // Find AI players who could help
+    const aiHelpers = gameState.players.filter(p =>
+      p.type === 'AI' && p.id !== currentPlayer.id && p.cash >= 100
+    );
+
+    if (aiHelpers.length === 0) {
+      addLog('共同購入できる仲間がいません...');
+      return;
+    }
+
+    // Calculate total contribution from AI players
+    let totalContribution = 0;
+    const contributors: { id: string; name: string; amount: number }[] = [];
+
+    for (const ai of aiHelpers) {
+      const behavior = ai.aiBehavior;
+      if (!behavior) continue;
+
+      // Decision based on personality and cash
+      const baseChance = behavior.supportChance || 0.5;
+      const cashRatio = ai.cash / 2000;
+      const finalChance = Math.min(0.85, baseChance * (0.5 + cashRatio * 0.5));
+
+      if (Math.random() < finalChance) {
+        // Calculate contribution amount based on personality
+        const maxContribution = Math.floor(ai.cash * 0.4);
+        const baseAmount = behavior.personality === 'charitable' ? 300 :
+                          behavior.personality === 'balanced' ? 200 :
+                          behavior.personality === 'cautious' ? 100 : 150;
+        const contribution = Math.min(baseAmount, maxContribution, shortage - totalContribution);
+
+        if (contribution > 0) {
+          totalContribution += contribution;
+          contributors.push({ id: ai.id, name: ai.name, amount: contribution });
+          showAiSpeech(ai.name, getRandomDialog('support'));
+        }
+
+        if (totalContribution >= shortage) break;
+      }
+    }
+
+    // Check if we have enough
+    if (currentPlayer.cash + totalContribution >= cost) {
+      // Success! Execute joint purchase
+      setGameState(prev => {
+        const updatedPlayers = [...prev.players];
+        const player = updatedPlayers[prev.currentPlayerIndex];
+
+        // Deduct from contributors
+        for (const contrib of contributors) {
+          const contributor = updatedPlayers.find(p => p.id === contrib.id);
+          if (contributor) {
+            contributor.cash -= contrib.amount;
+          }
+        }
+
+        // Player pays the rest
+        const playerPayment = cost - totalContribution;
+        player.cash -= playerPayment;
+
+        // Add asset to player
+        const newAsset: Asset = {
+          id: Date.now().toString(),
+          name: gameState.currentCard!.title,
+          cost,
+          cashflow,
+          type: 'BUSINESS'
+        };
+        player.assets.push(newAsset);
+        player.passiveIncome += cashflow;
+
+        // Check escape condition
+        if (!player.hasEscaped && player.passiveIncome >= player.monthlyExpenses) {
+          player.hasEscaped = true;
+          player.cash += 100000;
+          player.position = 0;
+        }
+
+        return { ...prev, players: updatedPlayers, phase: 'END_TURN' };
+      });
+
+      const contribNames = contributors.map(c => `${c.name}(¥${c.amount})`).join(', ');
+      addLog(`🤝 共同購入成功！ ${contribNames} の協力で「${gameState.currentCard.title}」を購入！`);
+
+      if (!currentPlayer.hasEscaped && (currentPlayer.passiveIncome + cashflow) >= currentPlayer.monthlyExpenses) {
+        addLog(`🎉 おめでとう！！ ${currentPlayer.name} はラットレースを脱出した！`);
+      }
+    } else {
+      // Failed - not enough contribution
+      addLog(`共同購入失敗... 協力が集まりませんでした（必要: ¥${shortage}, 集まった: ¥${totalContribution}）`);
+    }
+  };
+
   // --- Support Actions (Fast Track helping Rat Race) ---
   const initiateSupport = () => {
     if (!isFastTrack || ratRacePlayers.length === 0) return;
@@ -1333,28 +1434,45 @@ export default function App() {
                 )}
 
                 {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
                   {isHumanTurn ? (
                     <>
-                      <Button variant="outline" onClick={handlePass} className="text-sm">
-                        パス
-                      </Button>
                       {gameState.currentCard.type === 'CHARITY' ? (
-                        <Button onClick={handleDonate} disabled={currentPlayer.cash < (gameState.currentCard.cost === 0 ? Math.floor((currentPlayer.salary + currentPlayer.passiveIncome) * 0.1) : gameState.currentCard.cost)} className="bg-pink-500 hover:bg-pink-600 text-sm">
-                          寄付する
-                        </Button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button variant="outline" onClick={handlePass} className="text-sm">
+                            パス
+                          </Button>
+                          <Button onClick={handleDonate} disabled={currentPlayer.cash < (gameState.currentCard.cost === 0 ? Math.floor((currentPlayer.salary + currentPlayer.passiveIncome) * 0.1) : gameState.currentCard.cost)} className="bg-pink-500 hover:bg-pink-600 text-sm">
+                            寄付する
+                          </Button>
+                        </div>
                       ) : ['OPPORTUNITY', 'BUSINESS', 'DREAM'].includes(gameState.currentCard.type) ? (
-                        <Button onClick={handleBuyAsset} disabled={currentPlayer.cash < (gameState.currentCard.cost || 0)} className="text-sm">
-                          購入
-                        </Button>
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button onClick={handleBuyAsset} disabled={currentPlayer.cash < (gameState.currentCard.cost || 0)} className="text-sm">
+                              購入
+                            </Button>
+                            <Button onClick={handleJointPurchase} className="text-sm bg-purple-600 hover:bg-purple-700">
+                              🤝 共同購入
+                            </Button>
+                          </div>
+                          <Button variant="outline" onClick={handlePass} className="text-sm w-full">
+                            パス
+                          </Button>
+                        </div>
                       ) : (
-                        <Button variant="danger" onClick={handlePayDoodad} className="text-sm">
-                          支払う
-                        </Button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button variant="outline" onClick={handlePass} className="text-sm">
+                            パス
+                          </Button>
+                          <Button variant="danger" onClick={handlePayDoodad} className="text-sm">
+                            支払う
+                          </Button>
+                        </div>
                       )}
                     </>
                   ) : (
-                    <div className="col-span-2 text-slate-400 text-xs py-2">
+                    <div className="text-slate-400 text-xs py-2 text-center">
                       {currentPlayer?.name}が判断中...
                     </div>
                   )}
