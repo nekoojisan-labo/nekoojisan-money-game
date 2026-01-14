@@ -604,40 +604,46 @@ export default function App() {
     }, 500);
   };
 
-  // --- Human Rat Race player requesting cooperation from AI Fast Track players ---
+  // --- Human player requesting cooperation from AI players ---
   const requestCooperation = () => {
-    if (!currentPlayer || isFastTrack) return;
+    if (!currentPlayer) return;
 
-    // Find AI Fast Track players who could help
-    const aiFastTrackPlayers = gameState.players.filter(p =>
-      p.type === 'AI' && p.hasEscaped && p.cash >= 200
+    // Find AI players who could help (any AI with enough cash)
+    const aiHelpers = gameState.players.filter(p =>
+      p.type === 'AI' && p.id !== currentPlayer.id && p.cash >= 200
     );
 
-    if (aiFastTrackPlayers.length === 0) {
-      addLog('協力できる投資家がいません...');
+    if (aiHelpers.length === 0) {
+      addLog('協力できるプレイヤーがいません...');
       setShowCoopModal(false);
       return;
     }
 
     // Each AI decides based on personality and cash
-    let bestSupporter: typeof aiFastTrackPlayers[0] | null = null;
+    let bestSupporter: typeof aiHelpers[0] | null = null;
     let supportAmount = 0;
 
-    for (const ai of aiFastTrackPlayers) {
+    for (const ai of aiHelpers) {
       const behavior = ai.aiBehavior;
       if (!behavior) continue;
 
-      // Decision based on personality and cash
-      const supportChance = behavior.supportChance || 0.5;
-      const cashRatio = ai.cash / 5000; // More cash = more willing to help
-      const finalChance = supportChance * (0.5 + cashRatio * 0.5);
+      // Decision based on personality, cash, and whether they've escaped
+      const baseChance = behavior.supportChance || 0.5;
+      const cashRatio = ai.cash / 3000; // More cash = more willing to help
+      const escapedBonus = ai.hasEscaped ? 0.2 : 0; // Fast Track players are more willing
+      const finalChance = Math.min(0.9, baseChance * (0.5 + cashRatio * 0.5) + escapedBonus);
 
       if (Math.random() < finalChance) {
-        // AI agrees to help - amount based on personality
+        // AI agrees to help - amount based on personality and status
         const baseAmount = behavior.personality === 'charitable' ? 400 :
                           behavior.personality === 'balanced' ? 300 :
-                          behavior.personality === 'cautious' ? 200 : 250;
-        const amount = Math.min(baseAmount, Math.floor(ai.cash * 0.3));
+                          behavior.personality === 'cautious' ? 200 :
+                          behavior.personality === 'aggressive' ? 250 : 150;
+        const statusMultiplier = ai.hasEscaped ? 1.5 : 1; // Fast Track gives more
+        const amount = Math.min(
+          Math.floor(baseAmount * statusMultiplier),
+          Math.floor(ai.cash * 0.3)
+        );
 
         if (amount > supportAmount) {
           bestSupporter = ai;
@@ -666,7 +672,7 @@ export default function App() {
       setCoopResult({ accepted: true, supporter: bestSupporter.name, amount: supportAmount });
     } else {
       // All AI declined
-      const decliner = aiFastTrackPlayers[Math.floor(Math.random() * aiFastTrackPlayers.length)];
+      const decliner = aiHelpers[Math.floor(Math.random() * aiHelpers.length)];
       showAiSpeech(decliner.name, getRandomDialog('pass'));
       addLog(`${decliner.name}は協力を断りました...`);
       setCoopResult({ accepted: false, supporter: decliner.name, amount: 0 });
@@ -1055,8 +1061,8 @@ export default function App() {
                       売却
                     </button>
                   )}
-                  {/* Cooperation button for Rat Race players */}
-                  {!isFastTrack && fastTrackPlayers.length > 0 && (
+                  {/* Cooperation button - ask other players for help */}
+                  {!isFastTrack && gameState.players.filter(p => p.type === 'AI' && p.id !== currentPlayer?.id && p.cash >= 200).length > 0 && (
                     <button
                       onClick={() => setShowCoopModal(true)}
                       className="px-2 py-1.5 text-xs bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 font-medium"
