@@ -821,270 +821,216 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto p-4 md:grid md:grid-cols-12 md:gap-6">
-
-        {/* Left Col: Board & Actions */}
-        <div className="md:col-span-7 lg:col-span-8 space-y-6">
-          <GameBoard players={gameState.players} currentPlayerId={currentPlayer?.id || ''} />
-
-          {/* Action Area */}
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 min-h-[300px] flex flex-col items-center justify-center relative overflow-hidden">
-
-            {/* Background Pattern */}
-            <div className={`absolute inset-0 opacity-5 [background-size:16px_16px] ${isFastTrack ? 'bg-[radial-gradient(#d97706_1px,transparent_1px)]' : 'bg-[radial-gradient(#444cf7_1px,transparent_1px)]'}`}></div>
+      {/* Popup Modal for Actions */}
+      {(gameState.phase === 'ROLL' || gameState.phase === 'DECISION' || gameState.phase === 'SUPPORT' || gameState.phase === 'END_TURN') && (
+        <div className="fixed inset-0 bg-black/30 z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 animate-in zoom-in-95 duration-200">
 
             {gameState.phase === 'ROLL' && (
-              <div className="text-center z-10 animate-in fade-in zoom-in duration-300">
-                <div className="text-6xl mb-6 animate-bounce">
+              <div className="text-center">
+                <div className="text-5xl mb-3 animate-bounce">
                   {currentPlayer?.charityTurnsRemaining > 0 ? '🎲🎲' : '🎲'}
                 </div>
-                <h2 className="text-2xl font-bold text-slate-800 mb-2">
-                  {isHumanTurn ? 'あなたの番です' : `${currentPlayer?.name}の番です`}
+                <h2 className="text-lg font-bold text-slate-800 mb-1">
+                  {isHumanTurn ? 'あなたの番です' : `${currentPlayer?.name}の番`}
                 </h2>
                 {currentPlayer?.charityTurnsRemaining > 0 && (
-                  <p className="text-pink-600 font-bold mb-2">
-                    ❤️ 寄付ボーナス: サイコロ2個！(残り{currentPlayer.charityTurnsRemaining}ターン)
+                  <p className="text-pink-600 text-xs font-bold mb-2">
+                    ❤️ サイコロ2個ボーナス (残り{currentPlayer.charityTurnsRemaining}ターン)
                   </p>
                 )}
-                <p className="text-slate-500 mb-4">
-                  {isFastTrack ? 'ファーストトラックを突き進め！' : 'サイコロを振って運命を決めよう！'}
-                </p>
-
-                {/* Show goal progress for Fast Track players */}
-                {isFastTrack && currentPlayer?.selectedGoal && (
-                  <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                    <div className="flex items-center justify-center gap-2 text-sm">
-                      <Target className="w-4 h-4 text-amber-600" />
-                      <span className="text-amber-800">目標: {currentPlayer.selectedGoal.title}</span>
-                    </div>
-                    <div className="text-xs text-amber-600 mt-1">
-                      現在: {currentPlayer.cash.toLocaleString()} / 必要: {currentPlayer.selectedGoal.requiredCash.toLocaleString()}
-                    </div>
-                  </div>
-                )}
-
-                {isHumanTurn && (
-                  <div className="space-y-3">
-                    <Button size="lg" onClick={rollDice} className={isFastTrack ? "shadow-xl shadow-amber-200 bg-amber-500 hover:bg-amber-600 border-amber-700" : "shadow-xl shadow-green-200"}>
-                      {currentPlayer?.charityTurnsRemaining > 0 ? 'サイコロ2個振る！' : 'サイコロを振る'}
+                {isHumanTurn ? (
+                  <div className="space-y-2 mt-4">
+                    <Button size="lg" onClick={rollDice} className="w-full">
+                      {currentPlayer?.charityTurnsRemaining > 0 ? 'サイコロを振る！🎲🎲' : 'サイコロを振る 🎲'}
                     </Button>
-
-                    {/* Support button for Fast Track players */}
                     {isFastTrack && ratRacePlayers.length > 0 && (
-                      <div>
-                        <Button variant="outline" onClick={initiateSupport} className="flex items-center gap-2">
-                          <Handshake className="w-4 h-4" />
-                          仲間を支援する
-                        </Button>
-                      </div>
+                      <Button variant="outline" onClick={initiateSupport} className="w-full text-sm">
+                        <Handshake className="w-4 h-4 mr-1" /> 仲間を支援
+                      </Button>
                     )}
                   </div>
-                )}
-                {!isHumanTurn && (
-                  <p className="text-sm text-slate-400">考え中...</p>
+                ) : (
+                  <p className="text-sm text-slate-400 mt-3">考え中...</p>
                 )}
               </div>
             )}
 
             {gameState.phase === 'SUPPORT' && (
-              <div className="w-full max-w-md z-10 animate-in slide-in-from-bottom duration-500">
-                <div className="border-t-8 border-blue-500 rounded-xl bg-white shadow-2xl overflow-hidden">
-                  <div className="p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Handshake className="w-6 h-6 text-blue-600" />
-                      <h3 className="text-xl font-bold text-slate-800">仲間を支援する</h3>
-                    </div>
-                    <p className="text-slate-600 mb-4">ラットレースで頑張っている仲間を助けよう！</p>
-
-                    <div className="space-y-4 mb-6">
-                      {ratRacePlayers.map(player => (
-                        <div key={player.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-2xl">{player.avatar}</span>
-                            <span className="font-bold">{player.name}</span>
-                            <span className="text-xs bg-slate-200 px-2 py-0.5 rounded">{player.jobTitle}</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <button
-                              onClick={() => executeSupport(player.id, 'JOB')}
-                              disabled={currentPlayer?.cash < SUPPORT_OPTIONS.JOB.costToInvestor}
-                              className="p-2 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50"
-                            >
-                              仕事依頼 (-{SUPPORT_OPTIONS.JOB.costToInvestor})
-                            </button>
-                            <button
-                              onClick={() => executeSupport(player.id, 'INVESTMENT')}
-                              disabled={currentPlayer?.cash < SUPPORT_OPTIONS.INVESTMENT.costToInvestor}
-                              className="p-2 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
-                            >
-                              共同投資 (-{SUPPORT_OPTIONS.INVESTMENT.costToInvestor})
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <Button variant="outline" onClick={skipSupport} className="w-full">
-                      今回はパス
-                    </Button>
-                  </div>
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <Handshake className="w-5 h-5 text-blue-600" />
+                  <h3 className="text-lg font-bold text-slate-800">仲間を支援</h3>
                 </div>
+
+                <div className="space-y-2 mb-4 max-h-[200px] overflow-y-auto">
+                  {ratRacePlayers.map(player => (
+                    <div key={player.id} className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-left">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg">{player.avatar}</span>
+                        <span className="font-bold text-sm">{player.name}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1">
+                        <button
+                          onClick={() => executeSupport(player.id, 'JOB')}
+                          disabled={currentPlayer?.cash < SUPPORT_OPTIONS.JOB.costToInvestor}
+                          className="p-1.5 text-[10px] bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50"
+                        >
+                          仕事依頼 (-{SUPPORT_OPTIONS.JOB.costToInvestor})
+                        </button>
+                        <button
+                          onClick={() => executeSupport(player.id, 'INVESTMENT')}
+                          disabled={currentPlayer?.cash < SUPPORT_OPTIONS.INVESTMENT.costToInvestor}
+                          className="p-1.5 text-[10px] bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
+                        >
+                          共同投資 (-{SUPPORT_OPTIONS.INVESTMENT.costToInvestor})
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Button variant="outline" onClick={skipSupport} className="w-full">
+                  パス
+                </Button>
               </div>
             )}
 
             {gameState.phase === 'DECISION' && gameState.currentCard && (
-              <div className="w-full max-w-md z-10 animate-in slide-in-from-bottom duration-500">
-                <div className={`border-t-8 rounded-xl bg-white shadow-2xl overflow-hidden ${
-                  gameState.currentCard.type === 'CHARITY' ? 'border-pink-500' :
-                  ['OPPORTUNITY', 'BUSINESS', 'DREAM'].includes(gameState.currentCard.type) ? 'border-green-500' : 'border-red-500'
+              <div className="text-center">
+                {/* Card Type Badge */}
+                <span className={`inline-block text-xs font-bold px-2 py-1 rounded mb-2 ${
+                  gameState.currentCard.type === 'CHARITY' ? 'bg-pink-100 text-pink-700' :
+                  ['OPPORTUNITY', 'BUSINESS', 'DREAM'].includes(gameState.currentCard.type) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                 }`}>
-                  <div className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <span className={`text-xs font-bold px-2 py-1 rounded ${
-                        gameState.currentCard.type === 'CHARITY' ? 'bg-pink-100 text-pink-700' :
-                        ['OPPORTUNITY', 'BUSINESS', 'DREAM'].includes(gameState.currentCard.type) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {gameState.currentCard.type === 'OPPORTUNITY' ? 'チャンス！' :
-                         gameState.currentCard.type === 'BUSINESS' ? 'ビッグビジネス！' :
-                         gameState.currentCard.type === 'DREAM' ? '夢の実現' :
-                         gameState.currentCard.type === 'CHARITY' ? '寄付のチャンス' :
-                         '支払い...'}
-                      </span>
-                      {gameState.currentCard.cost !== undefined && gameState.currentCard.cost > 0 && (
-                        <span className="text-xl font-bold text-slate-800">
-                          -{gameState.currentCard.cost.toLocaleString()}
-                        </span>
-                      )}
-                    </div>
+                  {gameState.currentCard.type === 'OPPORTUNITY' ? 'チャンス！' :
+                   gameState.currentCard.type === 'BUSINESS' ? 'ビジネス！' :
+                   gameState.currentCard.type === 'DREAM' ? '夢' :
+                   gameState.currentCard.type === 'CHARITY' ? '寄付' :
+                   '支払い'}
+                </span>
 
-                    <h3 className="text-2xl font-bold text-slate-800 mb-2">{gameState.currentCard.title}</h3>
-                    <p className="text-slate-600 mb-6">{gameState.currentCard.description}</p>
+                <h3 className="text-lg font-bold text-slate-800 mb-1">{gameState.currentCard.title}</h3>
+                <p className="text-xs text-slate-500 mb-3">{gameState.currentCard.description}</p>
 
-                    {gameState.currentCard.cashflow && gameState.currentCard.cashflow > 0 && (
-                      <div className="bg-green-50 p-3 rounded-lg mb-6 flex items-center gap-2 text-green-700 font-bold border border-green-200">
-                        <TrendingUp className="w-5 h-5" />
-                        毎月の収入が +{gameState.currentCard.cashflow.toLocaleString()} 増えます！
+                {/* Cost & Benefit */}
+                <div className="flex justify-center gap-4 mb-3 text-sm">
+                  {gameState.currentCard.cost !== undefined && gameState.currentCard.cost > 0 && (
+                    <span className="text-red-600 font-bold">コスト: -{gameState.currentCard.cost.toLocaleString()}</span>
+                  )}
+                  {gameState.currentCard.cashflow && gameState.currentCard.cashflow > 0 && (
+                    <span className="text-green-600 font-bold">収入: +{gameState.currentCard.cashflow.toLocaleString()}/月</span>
+                  )}
+                </div>
+
+                {gameState.currentCard.type === 'CHARITY' && (
+                  <p className="text-xs text-pink-600 mb-3">💕 3ターンサイコロ2個ボーナス！</p>
+                )}
+
+                {/* Coach Hint (compact) */}
+                {isHumanTurn && gameState.currentCard.type !== 'CHARITY' && !['DOODAD', 'AUDIT'].includes(gameState.currentCard.type) && (
+                  <div className="mb-3">
+                    {!gameState.coachMessage ? (
+                      <button
+                        onClick={askCoach}
+                        disabled={gameState.isCoachLoading}
+                        className="text-[10px] text-purple-600 hover:underline"
+                      >
+                        <Lightbulb className={`w-3 h-3 inline mr-1 ${gameState.isCoachLoading ? 'animate-pulse' : ''}`} />
+                        {gameState.isCoachLoading ? '考え中...' : 'AIコーチに聞く'}
+                      </button>
+                    ) : (
+                      <div className="bg-purple-50 p-2 rounded text-[10px] text-left text-slate-600 border border-purple-200">
+                        🤖 {gameState.coachMessage}
                       </div>
                     )}
-
-                    {gameState.currentCard.type === 'CHARITY' && (
-                      <div className="bg-pink-50 p-3 rounded-lg mb-6 flex items-center gap-2 text-pink-700 font-bold border border-pink-200">
-                        <Heart className="w-5 h-5" />
-                        寄付すると3ターンの間、サイコロを2個振れます！
-                      </div>
-                    )}
-
-                    {/* Coach AI Section */}
-                    {isHumanTurn && gameState.currentCard.type !== 'CHARITY' && (
-                      <div className="mb-6">
-                        {!gameState.coachMessage ? (
-                          <button
-                            onClick={askCoach}
-                            disabled={gameState.isCoachLoading}
-                            className="flex items-center gap-2 text-sm text-purple-600 hover:bg-purple-50 px-3 py-2 rounded transition-colors w-full justify-center border border-dashed border-purple-300"
-                          >
-                            <Lightbulb className={`w-4 h-4 ${gameState.isCoachLoading ? 'animate-pulse' : ''}`} />
-                            {gameState.isCoachLoading ? 'コーチが考え中...' : 'AIコーチにヒントを聞く'}
-                          </button>
-                        ) : (
-                          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 relative">
-                            <div className="absolute -top-3 -left-2 bg-purple-600 text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <span className="text-xs">🤖</span> コーチからのヒント
-                            </div>
-                            <p className="text-sm text-slate-700 mt-1 leading-relaxed">{gameState.coachMessage}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-4">
-                      {isHumanTurn ? (
-                        <>
-                          <Button variant="outline" onClick={handlePass}>
-                            パスする
-                          </Button>
-                          {gameState.currentCard.type === 'CHARITY' ? (
-                            <Button onClick={handleDonate} disabled={currentPlayer.cash < (gameState.currentCard.cost === 0 ? Math.floor((currentPlayer.salary + currentPlayer.passiveIncome) * 0.1) : gameState.currentCard.cost)} className="bg-pink-500 hover:bg-pink-600">
-                              <Heart className="w-4 h-4 mr-1" /> 寄付する
-                            </Button>
-                          ) : ['OPPORTUNITY', 'BUSINESS', 'DREAM'].includes(gameState.currentCard.type) ? (
-                            <Button onClick={handleBuyAsset} disabled={currentPlayer.cash < (gameState.currentCard.cost || 0)}>
-                              {gameState.currentCard.type === 'DREAM' ? '夢を叶える！' : '購入する'}
-                            </Button>
-                          ) : (
-                            <Button variant="danger" onClick={handlePayDoodad}>
-                              支払う
-                            </Button>
-                          )}
-                        </>
-                      ) : (
-                        <div className="col-span-2 text-center text-slate-400 text-sm py-2">
-                          {currentPlayer?.name}が判断しています...
-                        </div>
-                      )}
-                    </div>
                   </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  {isHumanTurn ? (
+                    <>
+                      <Button variant="outline" onClick={handlePass} className="text-sm">
+                        パス
+                      </Button>
+                      {gameState.currentCard.type === 'CHARITY' ? (
+                        <Button onClick={handleDonate} disabled={currentPlayer.cash < (gameState.currentCard.cost === 0 ? Math.floor((currentPlayer.salary + currentPlayer.passiveIncome) * 0.1) : gameState.currentCard.cost)} className="bg-pink-500 hover:bg-pink-600 text-sm">
+                          寄付する
+                        </Button>
+                      ) : ['OPPORTUNITY', 'BUSINESS', 'DREAM'].includes(gameState.currentCard.type) ? (
+                        <Button onClick={handleBuyAsset} disabled={currentPlayer.cash < (gameState.currentCard.cost || 0)} className="text-sm">
+                          購入
+                        </Button>
+                      ) : (
+                        <Button variant="danger" onClick={handlePayDoodad} className="text-sm">
+                          支払う
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <div className="col-span-2 text-slate-400 text-xs py-2">
+                      {currentPlayer?.name}が判断中...
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             {gameState.phase === 'END_TURN' && (
-              <div className="text-center z-10">
-                <h3 className="text-xl font-bold text-slate-700 mb-4">ターン終了</h3>
+              <div className="text-center">
+                <div className="text-3xl mb-2">✓</div>
+                <h3 className="text-lg font-bold text-slate-700 mb-3">ターン終了</h3>
                 {isHumanTurn && (
-                  <Button onClick={advanceTurn} className="mx-auto">
-                    次の人へ
+                  <Button onClick={advanceTurn}>
+                    次の人へ →
                   </Button>
                 )}
               </div>
             )}
+
           </div>
         </div>
+      )}
 
-        {/* Right Col: Stats & Logs */}
-        <div className="md:col-span-5 lg:col-span-4 space-y-6 mt-6 md:mt-0">
+      {/* Main Content - Always visible */}
+      <main className="max-w-7xl mx-auto p-3 grid grid-cols-1 lg:grid-cols-12 gap-3">
 
-          {/* Current Player Sheet */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-bold text-slate-500 text-sm uppercase tracking-wider">財務シート</h3>
-            </div>
-            <div className="space-y-4">
-              {gameState.players.map(player => (
-                <FinancialSheet
-                  key={player.id}
-                  player={player}
-                  isCurrentUser={player.id === currentPlayer?.id}
-                />
-              ))}
-            </div>
+        {/* Left: Game Board */}
+        <div className="lg:col-span-7">
+          <GameBoard players={gameState.players} currentPlayerId={currentPlayer?.id || ''} />
+        </div>
+
+        {/* Right: Player Sheets & Log */}
+        <div className="lg:col-span-5 grid grid-cols-1 gap-2">
+
+          {/* Player Sheets - Compact Grid */}
+          <div className="grid grid-cols-2 gap-2">
+            {gameState.players.map(player => (
+              <FinancialSheet
+                key={player.id}
+                player={player}
+                isCurrentUser={player.id === currentPlayer?.id}
+              />
+            ))}
           </div>
 
-          {/* Game Log */}
-          <div className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex flex-col max-h-[300px]">
-            <div className="p-3 border-b border-slate-100 bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider">
-              ゲームログ
+          {/* Game Log - Compact */}
+          <div className="bg-white rounded-lg shadow border border-slate-200 overflow-hidden">
+            <div className="p-2 border-b border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase flex items-center justify-between">
+              <span>ゲームログ</span>
+              <span className="text-slate-400">ターン {gameState.turnCount}</span>
             </div>
-            <div ref={scrollRef} className="p-4 overflow-y-auto space-y-3 flex-1 bg-white scrollbar-hide">
-              {gameState.logs.map((log) => (
-                <div key={log.id} className="text-sm border-l-2 border-slate-200 pl-3 py-1">
-                  <span className="text-[10px] text-slate-400 block mb-0.5">ターン {log.turn}</span>
-                  <span className="text-slate-700">{log.message}</span>
+            <div ref={scrollRef} className="p-2 overflow-y-auto max-h-[120px] space-y-1 text-xs">
+              {gameState.logs.slice(-5).map((log) => (
+                <div key={log.id} className="text-slate-600 border-l-2 border-slate-200 pl-2 py-0.5">
+                  {log.message}
                 </div>
               ))}
             </div>
           </div>
         </div>
       </main>
-
-      {/* Mobile Sticky Action Bar */}
-      {isHumanTurn && gameState.phase === 'ROLL' && (
-        <div className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t p-4 z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-          <Button size="lg" onClick={rollDice} className="w-full shadow-lg">
-            {currentPlayer?.charityTurnsRemaining > 0 ? '🎲🎲 サイコロ2個振る！' : '🎲 サイコロを振る'}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
