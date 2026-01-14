@@ -1053,24 +1053,22 @@ export default function App() {
               {/* Action buttons */}
               {isHumanTurn ? (
                 <div className="flex items-center gap-2">
-                  {currentPlayer?.assets && currentPlayer.assets.length > 0 && (
-                    <button
-                      onClick={() => setShowSellModal(true)}
-                      className="px-2 py-1.5 text-xs bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 font-medium"
-                    >
-                      売却
-                    </button>
-                  )}
-                  {/* Cooperation button - ask other players for help */}
-                  {!isFastTrack && gameState.players.filter(p => p.type === 'AI' && p.id !== currentPlayer?.id && p.cash >= 200).length > 0 && (
-                    <button
-                      onClick={() => setShowCoopModal(true)}
-                      className="px-2 py-1.5 text-xs bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 font-medium"
-                    >
-                      協力
-                    </button>
-                  )}
-                  {/* Support button for Fast Track players */}
+                  {/* 売却ボタン - 常に表示、資産がない時はdisabled */}
+                  <button
+                    onClick={() => setShowSellModal(true)}
+                    disabled={!currentPlayer?.assets || currentPlayer.assets.length === 0}
+                    className="px-2 py-1.5 text-xs bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    売却
+                  </button>
+                  {/* 協力ボタン（共同購入）- 常に表示 */}
+                  <button
+                    onClick={() => setShowCoopModal(true)}
+                    className="px-2 py-1.5 text-xs bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 font-medium"
+                  >
+                    協力
+                  </button>
+                  {/* 支援ボタン - Fast Trackプレイヤー用 */}
                   {isFastTrack && ratRacePlayers.length > 0 && (
                     <button
                       onClick={initiateSupport}
@@ -1149,23 +1147,28 @@ export default function App() {
         </div>
       )}
 
-      {/* Cooperation Modal (Human asking AI for help) */}
+      {/* Cooperation Modal (共同購入 - Joint Purchase) */}
       {showCoopModal && (
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 animate-in zoom-in-95 duration-200">
             {!coopResult ? (
               <div className="text-center">
                 <div className="text-4xl mb-3">🤝</div>
-                <h3 className="text-lg font-bold text-slate-800 mb-2">協力を求める</h3>
-                <p className="text-sm text-slate-600 mb-4">
-                  投資家に資金協力を求めますか？
+                <h3 className="text-lg font-bold text-slate-800 mb-2">共同購入</h3>
+                <p className="text-sm text-slate-600 mb-3">
+                  仲間と一緒に株や不動産を購入しよう！
                 </p>
-                <p className="text-xs text-slate-500 mb-4">
-                  相手の性格や所持金によって、OKしてくれるかどうかが変わります
-                </p>
+                <div className="bg-purple-50 p-3 rounded-lg mb-4 text-left">
+                  <p className="text-xs text-purple-700 mb-1">💡 共同購入のメリット</p>
+                  <ul className="text-xs text-slate-600 space-y-1">
+                    <li>• 高い資産も協力すれば買える</li>
+                    <li>• 仲間からの資金援助を受けられる</li>
+                    <li>• 相手の性格で協力率が変わる</li>
+                  </ul>
+                </div>
 
                 <div className="space-y-2">
-                  <Button onClick={requestCooperation} className="w-full">
+                  <Button onClick={requestCooperation} className="w-full bg-purple-600 hover:bg-purple-700">
                     協力を求める
                   </Button>
                   <Button variant="outline" onClick={() => setShowCoopModal(false)} className="w-full">
@@ -1177,11 +1180,11 @@ export default function App() {
               <div className="text-center">
                 <div className="text-4xl mb-3">{coopResult.accepted ? '🎉' : '😢'}</div>
                 <h3 className="text-lg font-bold text-slate-800 mb-2">
-                  {coopResult.accepted ? '協力成功！' : '断られた...'}
+                  {coopResult.accepted ? '共同購入成功！' : '断られた...'}
                 </h3>
                 <p className="text-sm text-slate-600">
                   {coopResult.accepted
-                    ? `${coopResult.supporter}が¥${coopResult.amount.toLocaleString()}を協力してくれました！`
+                    ? `${coopResult.supporter}が¥${coopResult.amount.toLocaleString()}を出資してくれました！`
                     : `${coopResult.supporter}は今回は協力できないようです...`}
                 </p>
               </div>
