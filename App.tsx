@@ -61,6 +61,9 @@ export default function App() {
   // AI speech bubble state
   const [aiSpeech, setAiSpeech] = useState<{ name: string; message: string } | null>(null);
 
+  // Sell modal state
+  const [showSellModal, setShowSellModal] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll logs
@@ -536,6 +539,35 @@ export default function App() {
     setGameState(prev => ({ ...prev, phase: 'END_TURN' }));
   };
 
+  // --- Sell Asset ---
+  const handleSellAsset = (assetId: string) => {
+    setGameState(prev => {
+      const updatedPlayers = [...prev.players];
+      const player = updatedPlayers[prev.currentPlayerIndex];
+      const assetIndex = player.assets.findIndex(a => a.id === assetId);
+
+      if (assetIndex === -1) return prev;
+
+      const asset = player.assets[assetIndex];
+      // Sell at 80% of original cost
+      const sellPrice = Math.floor(asset.cost * 0.8);
+
+      player.cash += sellPrice;
+      player.passiveIncome -= asset.cashflow;
+      player.assets.splice(assetIndex, 1);
+
+      return { ...prev, players: updatedPlayers };
+    });
+
+    const asset = currentPlayer.assets.find(a => a.id === assetId);
+    if (asset) {
+      const sellPrice = Math.floor(asset.cost * 0.8);
+      addLog(`${currentPlayer.name}は「${asset.name}」を${sellPrice}で売却しました。`);
+    }
+
+    setShowSellModal(false);
+  };
+
   // --- Coach AI Logic ---
   const askCoach = async () => {
     if (!gameState.currentCard) return;
@@ -848,7 +880,7 @@ export default function App() {
               </div>
             )}
 
-            {gameState.phase === 'ROLL' && (
+            {gameState.phase === 'ROLL' && !showSellModal && (
               <div className="text-center">
                 <div className="text-5xl mb-3 animate-bounce">
                   {currentPlayer?.charityTurnsRemaining > 0 ? '🎲🎲' : '🎲'}
@@ -866,15 +898,88 @@ export default function App() {
                     <Button size="lg" onClick={rollDice} className="w-full">
                       {currentPlayer?.charityTurnsRemaining > 0 ? 'サイコロを振る！🎲🎲' : 'サイコロを振る 🎲'}
                     </Button>
-                    {isFastTrack && ratRacePlayers.length > 0 && (
-                      <Button variant="outline" onClick={initiateSupport} className="w-full text-sm">
-                        <Handshake className="w-4 h-4 mr-1" /> 仲間を支援
-                      </Button>
-                    )}
+
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {isFastTrack && ratRacePlayers.length > 0 && (
+                        <Button variant="outline" onClick={initiateSupport} className="text-xs">
+                          <Handshake className="w-3 h-3 mr-1" /> 仲間を支援
+                        </Button>
+                      )}
+                      {currentPlayer?.assets && currentPlayer.assets.length > 0 && (
+                        <Button variant="outline" onClick={() => setShowSellModal(true)} className="text-xs">
+                          <TrendingUp className="w-3 h-3 mr-1" /> 資産を売却
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Player Status Summary */}
+                    <div className="mt-3 p-2 bg-slate-50 rounded-lg text-left text-xs">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-slate-500">所持金:</span>
+                        <span className="font-bold text-green-600">¥{currentPlayer?.cash.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-slate-500">不労所得:</span>
+                        <span className="font-bold text-blue-600">¥{currentPlayer?.passiveIncome.toLocaleString()}/月</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">支出:</span>
+                        <span className="font-bold text-red-500">¥{currentPlayer?.monthlyExpenses.toLocaleString()}/月</span>
+                      </div>
+                      {currentPlayer && !currentPlayer.hasEscaped && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <span className={`text-xs font-bold ${currentPlayer.passiveIncome >= currentPlayer.monthlyExpenses ? 'text-green-600' : 'text-slate-500'}`}>
+                            {currentPlayer.passiveIncome >= currentPlayer.monthlyExpenses
+                              ? '✓ 脱出条件クリア！'
+                              : `脱出まであと ¥${(currentPlayer.monthlyExpenses - currentPlayer.passiveIncome).toLocaleString()}/月`}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-sm text-slate-400 mt-3">考え中...</p>
                 )}
+              </div>
+            )}
+
+            {/* Sell Asset Modal */}
+            {gameState.phase === 'ROLL' && showSellModal && (
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <TrendingUp className="w-5 h-5 text-amber-600" />
+                  <h3 className="text-lg font-bold text-slate-800">資産を売却</h3>
+                </div>
+                <p className="text-xs text-slate-500 mb-3">売却価格は購入価格の80%です</p>
+
+                <div className="space-y-2 mb-4 max-h-[200px] overflow-y-auto">
+                  {currentPlayer?.assets.map(asset => {
+                    const sellPrice = Math.floor(asset.cost * 0.8);
+                    return (
+                      <div key={asset.id} className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-left">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="font-bold text-sm">{asset.name}</div>
+                            <div className="text-[10px] text-slate-500">
+                              収入: +{asset.cashflow}/月
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleSellAsset(asset.id)}
+                            className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 font-bold"
+                          >
+                            ¥{sellPrice.toLocaleString()}で売却
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <Button variant="outline" onClick={() => setShowSellModal(false)} className="w-full">
+                  戻る
+                </Button>
               </div>
             )}
 
