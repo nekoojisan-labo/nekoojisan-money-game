@@ -1,17 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Player, GameState, GamePhase, GameCard, GameLog, Asset, LifeGoal
+  Player, GameState, GamePhase, GameCard, GameLog, Asset, LifeGoal, DifficultyLevel
 } from './types';
 import {
   INITIAL_PLAYERS, BOARD_SPACES, BOARD_SIZE, FAST_TRACK_SPACES,
   OPPORTUNITY_CARDS, DOODAD_CARDS, FAST_TRACK_OPPORTUNITIES, FAST_TRACK_DOODADS,
-  LIFE_GOALS, CHARITY_CARDS, SUPPORT_OPTIONS
+  LIFE_GOALS, CHARITY_CARDS, SUPPORT_OPTIONS, DIFFICULTY_SETTINGS, AI_DIALOGS, RANDOM_EVENTS
 } from './constants';
 import { GameBoard } from './components/GameBoard';
 import { FinancialSheet } from './components/FinancialSheet';
 import { Button } from './components/Button';
 import { getCoachHint } from './services/coachService';
-import { Dice1, Dice2, Dice3, Dice4, Dice5, Dice6, Lightbulb, User, Users, RefreshCcw, TrendingUp, Trophy, Star, Heart, Handshake, Target } from 'lucide-react';
+import { Dice1, Dice2, Dice3, Dice4, Dice5, Dice6, Lightbulb, User, Users, RefreshCcw, TrendingUp, Trophy, Star, Heart, Handshake, Target, Sparkles, MessageCircle } from 'lucide-react';
+
+// Helper to get random dialog
+const getRandomDialog = (category: keyof typeof AI_DIALOGS): string => {
+  const dialogs = AI_DIALOGS[category];
+  return dialogs[Math.floor(Math.random() * dialogs.length)];
+};
+
+// Apply difficulty settings to players
+const applyDifficultyToPlayers = (players: Player[], difficulty: DifficultyLevel): Player[] => {
+  const settings = DIFFICULTY_SETTINGS.find(d => d.id === difficulty)!;
+  return players.map(p => ({
+    ...p,
+    cash: Math.floor(p.cash * settings.startingCashMultiplier),
+    monthlyExpenses: Math.floor(p.monthlyExpenses * settings.expenseMultiplier),
+  }));
+};
+
+// Apply difficulty to goals
+const applyDifficultyToGoals = (goals: LifeGoal[], difficulty: DifficultyLevel): LifeGoal[] => {
+  const settings = DIFFICULTY_SETTINGS.find(d => d.id === difficulty)!;
+  return goals.map(g => ({
+    ...g,
+    requiredCash: Math.floor(g.requiredCash * settings.goalMultiplier),
+  }));
+};
 
 export default function App() {
   // --- Game State ---
@@ -26,10 +51,15 @@ export default function App() {
     winner: null,
     isCoachLoading: false,
     coachMessage: null,
+    difficulty: 'teen',
     goalSelectingPlayerIndex: 0,
     supportTargetId: null,
     supportType: null,
+    eventMessage: null,
   });
+
+  // AI speech bubble state
+  const [aiSpeech, setAiSpeech] = useState<{ name: string; message: string } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -105,9 +135,30 @@ export default function App() {
 
   // --- Actions ---
 
+  // Show AI speech bubble temporarily
+  const showAiSpeech = (name: string, message: string) => {
+    setAiSpeech({ name, message });
+    setTimeout(() => setAiSpeech(null), 2500);
+  };
+
+  // Set difficulty and start game
+  const selectDifficulty = (difficulty: DifficultyLevel) => {
+    const adjustedPlayers = applyDifficultyToPlayers(JSON.parse(JSON.stringify(INITIAL_PLAYERS)), difficulty);
+    setGameState(prev => ({
+      ...prev,
+      difficulty,
+      players: adjustedPlayers,
+      phase: 'GOAL_SELECT',
+      goalSelectingPlayerIndex: 0,
+    }));
+  };
+
   const startGoalSelection = () => {
     setGameState(prev => ({ ...prev, phase: 'GOAL_SELECT', goalSelectingPlayerIndex: 0 }));
   };
+
+  // Get adjusted goals based on difficulty
+  const adjustedGoals = applyDifficultyToGoals(LIFE_GOALS, gameState.difficulty);
 
   const selectGoal = (goal: LifeGoal) => {
     setGameState(prev => {
@@ -136,14 +187,28 @@ export default function App() {
     });
   };
 
-  // AI auto-selects goal
+  // AI auto-selects goal (with personality influence)
   useEffect(() => {
     if (gameState.phase === 'GOAL_SELECT') {
       const selectingPlayer = gameState.players[gameState.goalSelectingPlayerIndex];
       if (selectingPlayer && selectingPlayer.type === 'AI') {
         setTimeout(() => {
-          const randomGoal = LIFE_GOALS[Math.floor(Math.random() * LIFE_GOALS.length)];
-          selectGoal(randomGoal);
+          const goals = applyDifficultyToGoals(LIFE_GOALS, gameState.difficulty);
+          // AI personality influences goal choice
+          const behavior = selectingPlayer.aiBehavior;
+          let selectedGoal;
+          if (behavior?.personality === 'aggressive' || behavior?.personality === 'gambler') {
+            // Pick more expensive goals
+            const expensiveGoals = [...goals].sort((a, b) => b.requiredCash - a.requiredCash);
+            selectedGoal = expensiveGoals[Math.floor(Math.random() * 2)]; // Top 2 expensive
+          } else if (behavior?.personality === 'cautious') {
+            // Pick cheaper goals
+            const cheapGoals = [...goals].sort((a, b) => a.requiredCash - b.requiredCash);
+            selectedGoal = cheapGoals[Math.floor(Math.random() * 2)]; // Top 2 cheap
+          } else {
+            selectedGoal = goals[Math.floor(Math.random() * goals.length)];
+          }
+          selectGoal(selectedGoal);
         }, 1000);
       }
     }
@@ -161,10 +226,40 @@ export default function App() {
       winner: null,
       isCoachLoading: false,
       coachMessage: null,
+      difficulty: 'teen',
       goalSelectingPlayerIndex: 0,
       supportTargetId: null,
       supportType: null,
+      eventMessage: null,
     });
+    setAiSpeech(null);
+  };
+
+  // AI decision making based on personality
+  const makeAiDecision = (player: Player, card: GameCard): 'buy' | 'pass' | 'donate' => {
+    const behavior = player.aiBehavior;
+    if (!behavior) return Math.random() > 0.5 ? 'buy' : 'pass';
+
+    const cost = card.cost || 0;
+    const cashRatio = cost / player.cash;
+
+    if (card.type === 'CHARITY') {
+      return Math.random() < behavior.charityChance ? 'donate' : 'pass';
+    }
+
+    if (['OPPORTUNITY', 'BUSINESS', 'DREAM'].includes(card.type)) {
+      // Check if can afford
+      if (player.cash < cost) return 'pass';
+
+      // Risk tolerance check
+      if (cashRatio > behavior.buyThreshold) {
+        // Only buy if risk tolerance allows
+        return Math.random() < behavior.riskTolerance ? 'buy' : 'pass';
+      }
+      return 'buy';
+    }
+
+    return 'pass';
   };
 
   const rollDice = () => {
@@ -459,42 +554,54 @@ export default function App() {
   useEffect(() => {
     if (!isHumanTurn && gameState.phase !== 'GAME_OVER' && currentPlayer) {
       const aiThinkingTime = 1500;
+      const behavior = currentPlayer.aiBehavior;
 
       if (gameState.phase === 'ROLL') {
-        setTimeout(() => rollDice(), aiThinkingTime);
+        setTimeout(() => {
+          // Show catchphrase sometimes
+          if (behavior && Math.random() > 0.6) {
+            showAiSpeech(currentPlayer.name, behavior.catchphrase);
+          }
+          rollDice();
+        }, aiThinkingTime);
       } else if (gameState.phase === 'DECISION' && gameState.currentCard) {
         setTimeout(() => {
           const card = gameState.currentCard!;
-          if (card.type === 'CHARITY') {
-            // AI always donates if they can
+
+          if (['DOODAD', 'AUDIT'].includes(card.type)) {
+            handlePayDoodad();
+            return;
+          }
+
+          const decision = makeAiDecision(currentPlayer, card);
+
+          if (decision === 'donate') {
             const totalIncome = currentPlayer.salary + currentPlayer.passiveIncome;
             const donationAmount = card.cost === 0 ? Math.floor(totalIncome * 0.1) : card.cost;
             if (currentPlayer.cash >= donationAmount) {
+              showAiSpeech(currentPlayer.name, getRandomDialog('donate'));
               handleDonate();
             } else {
+              showAiSpeech(currentPlayer.name, getRandomDialog('pass'));
               handlePass();
             }
-          } else if (['OPPORTUNITY', 'BUSINESS', 'DREAM'].includes(card.type)) {
-            const cost = card.cost || 0;
-            if (currentPlayer.cash >= cost) {
-              handleBuyAsset();
-            } else {
-              handlePass();
-            }
-          } else if (['DOODAD', 'AUDIT'].includes(card.type)) {
-            handlePayDoodad();
+          } else if (decision === 'buy') {
+            showAiSpeech(currentPlayer.name, getRandomDialog('buy'));
+            handleBuyAsset();
           } else {
+            showAiSpeech(currentPlayer.name, getRandomDialog('pass'));
             handlePass();
           }
         }, aiThinkingTime);
       } else if (gameState.phase === 'SUPPORT') {
         setTimeout(() => {
-          // AI may support a random rat race player
-          if (ratRacePlayers.length > 0 && Math.random() > 0.5) {
+          const supportChance = behavior?.supportChance || 0.5;
+          if (ratRacePlayers.length > 0 && Math.random() < supportChance) {
             const target = ratRacePlayers[Math.floor(Math.random() * ratRacePlayers.length)];
             const supportType = Math.random() > 0.5 ? 'JOB' : 'INVESTMENT';
             const support = SUPPORT_OPTIONS[supportType];
             if (currentPlayer.cash >= support.costToInvestor) {
+              showAiSpeech(currentPlayer.name, getRandomDialog('support'));
               executeSupport(target.id, supportType);
             } else {
               skipSupport();
@@ -504,7 +611,7 @@ export default function App() {
           }
         }, aiThinkingTime);
       } else if (gameState.phase === 'END_TURN') {
-        setTimeout(() => advanceTurn(), 1000);
+        setTimeout(() => advanceTurn(), 800);
       }
     }
   }, [gameState.phase, gameState.currentPlayerIndex]);
@@ -515,24 +622,71 @@ export default function App() {
   if (gameState.phase === 'SETUP') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 to-blue-500 p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
-          <h1 className="text-4xl font-extrabold text-green-600 mb-2">Money Adventure</h1>
-          <p className="text-slate-500 mb-8">みんなで協力してラットレースを脱出しよう！</p>
-          <div className="space-y-4">
-            <div className="p-4 bg-slate-50 rounded-lg text-left">
-              <h3 className="font-bold text-slate-700 mb-2">あそびかた</h3>
-              <ul className="text-sm text-slate-600 space-y-2 list-disc list-inside">
-                <li>最初に<span className="font-bold text-purple-600">人生の目標</span>を選ぼう</li>
-                <li>サイコロを振ってボードを進もう</li>
-                <li>「チャンス」マスで資産を買おう</li>
-                <li><span className="font-bold text-amber-600">不労所得 &gt;= 総支出</span> でファストトラックへ！</li>
-                <li><span className="font-bold text-green-600">寄付</span>するとサイコロ2個！</li>
-                <li>ファストトラックで<span className="font-bold text-pink-600">人生の目標</span>を達成したら勝利！</li>
-              </ul>
+        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-lg w-full">
+          <div className="text-center mb-6">
+            <h1 className="text-3xl font-extrabold text-green-600 mb-1">Money Adventure</h1>
+            <p className="text-slate-500 text-sm">お金の冒険に出かけよう！</p>
+          </div>
+
+          {/* Difficulty Selection */}
+          <div className="mb-6">
+            <h3 className="font-bold text-slate-700 mb-3 text-center">難易度を選んでね</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {DIFFICULTY_SETTINGS.map(diff => (
+                <button
+                  key={diff.id}
+                  onClick={() => selectDifficulty(diff.id)}
+                  className={`p-3 rounded-xl border-2 transition-all hover:scale-105 ${
+                    diff.id === 'kids' ? 'border-green-300 bg-green-50 hover:border-green-500' :
+                    diff.id === 'teen' ? 'border-blue-300 bg-blue-50 hover:border-blue-500' :
+                    'border-purple-300 bg-purple-50 hover:border-purple-500'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">
+                    {diff.id === 'kids' ? '🌱' : diff.id === 'teen' ? '🌿' : '🌳'}
+                  </div>
+                  <div className="font-bold text-sm text-slate-700">{diff.name}</div>
+                  <div className="text-[10px] text-slate-500">{diff.ageRange}</div>
+                </button>
+              ))}
             </div>
-            <Button size="lg" onClick={startGoalSelection} className="w-full">
-              ゲームスタート！
-            </Button>
+          </div>
+
+          {/* How to Play */}
+          <div className="p-3 bg-slate-50 rounded-lg text-left">
+            <h3 className="font-bold text-slate-700 mb-2 text-sm">あそびかた</h3>
+            <ul className="text-xs text-slate-600 space-y-1.5">
+              <li className="flex items-start gap-2">
+                <span className="text-purple-500">🎯</span>
+                <span>最初に<span className="font-bold text-purple-600">人生の目標</span>を選ぼう</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-blue-500">🎲</span>
+                <span>サイコロを振って「チャンス」マスで資産を買おう</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-500">🏃</span>
+                <span><span className="font-bold text-amber-600">不労所得 ≧ 支出</span> で投資家コースへ脱出！</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-pink-500">❤️</span>
+                <span>寄付すると<span className="font-bold text-pink-600">サイコロ2個</span>ボーナス！</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500">🏆</span>
+                <span>投資家コースで<span className="font-bold text-green-600">目標達成</span>したら勝利！</span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Characters Preview */}
+          <div className="mt-4 flex justify-center gap-2">
+            {INITIAL_PLAYERS.map(p => (
+              <div key={p.id} className="text-center">
+                <div className="text-2xl">{p.avatar}</div>
+                <div className="text-[9px] text-slate-500">{p.name}</div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -546,40 +700,56 @@ export default function App() {
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-400 to-pink-500 p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-2xl w-full">
-          <div className="text-center mb-6">
-            <div className="text-6xl mb-4">{selectingPlayer?.avatar}</div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">
-              {selectingPlayer?.name}の人生の目標を選ぼう！
+        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-xl w-full">
+          <div className="text-center mb-4">
+            <div className="text-5xl mb-2">{selectingPlayer?.avatar}</div>
+            <h2 className="text-xl font-bold text-slate-800 mb-1">
+              {selectingPlayer?.name}の人生の目標
             </h2>
-            <p className="text-slate-500">ファストトラックでこの目標を達成すると勝利！</p>
+            <p className="text-slate-500 text-sm">投資家コースでこの目標を達成すると勝利！</p>
           </div>
 
           {isHumanSelecting ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {LIFE_GOALS.map(goal => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {adjustedGoals.map(goal => (
                 <button
                   key={goal.id}
                   onClick={() => selectGoal(goal)}
-                  className="p-4 border-2 border-slate-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all text-left group"
+                  className="p-3 border-2 border-slate-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all text-left group"
                 >
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-3xl">{goal.icon}</span>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-2xl">{goal.icon}</span>
                     <div>
-                      <h3 className="font-bold text-slate-800 group-hover:text-purple-600">{goal.title}</h3>
-                      <span className="text-xs text-amber-600 font-bold">必要資金: {goal.requiredCash.toLocaleString()}</span>
+                      <h3 className="font-bold text-sm text-slate-800 group-hover:text-purple-600">{goal.title}</h3>
+                      <span className="text-[10px] text-amber-600 font-bold">必要: ¥{goal.requiredCash.toLocaleString()}</span>
                     </div>
                   </div>
-                  <p className="text-sm text-slate-600">{goal.description}</p>
+                  <p className="text-xs text-slate-500">{goal.description}</p>
                 </button>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8">
-              <div className="animate-spin text-4xl mb-4">🎯</div>
-              <p className="text-slate-500">{selectingPlayer?.name}が目標を選んでいます...</p>
+            <div className="text-center py-6">
+              <div className="animate-bounce text-4xl mb-3">🎯</div>
+              <p className="text-slate-500 text-sm">{selectingPlayer?.name}が目標を選んでいます...</p>
             </div>
           )}
+
+          {/* Progress indicator */}
+          <div className="mt-4 flex justify-center gap-1">
+            {gameState.players.map((p, i) => (
+              <div
+                key={p.id}
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${
+                  i < gameState.goalSelectingPlayerIndex ? 'bg-green-100 text-green-600' :
+                  i === gameState.goalSelectingPlayerIndex ? 'bg-purple-100 ring-2 ring-purple-400' :
+                  'bg-slate-100 text-slate-400'
+                }`}
+              >
+                {i < gameState.goalSelectingPlayerIndex ? '✓' : p.avatar}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -613,19 +783,37 @@ export default function App() {
 
   return (
     <div className={`min-h-screen pb-20 md:pb-0 transition-colors duration-1000 ${isFastTrack ? 'bg-amber-50' : 'bg-slate-50'}`}>
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-30 shadow-sm flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">🐢</span>
-          <h1 className="font-bold text-slate-700 hidden sm:block">Money Adventure</h1>
+      {/* AI Speech Bubble */}
+      {aiSpeech && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top duration-300">
+          <div className="bg-white rounded-xl shadow-lg border-2 border-blue-200 px-4 py-2 flex items-center gap-2">
+            <MessageCircle className="w-4 h-4 text-blue-500" />
+            <span className="font-bold text-sm text-slate-700">{aiSpeech.name}:</span>
+            <span className="text-sm text-slate-600">「{aiSpeech.message}」</span>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="bg-slate-100 px-3 py-1 rounded-full text-xs font-medium text-slate-600">
+      )}
+
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 px-3 py-2 sticky top-0 z-30 shadow-sm flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">💰</span>
+          <h1 className="font-bold text-slate-700 text-sm hidden sm:block">Money Adventure</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="bg-slate-100 px-2 py-1 rounded-full text-[10px] font-medium text-slate-600">
             ターン {gameState.turnCount}
           </div>
-          <div className="flex -space-x-2">
+          <div className="flex -space-x-1.5">
             {gameState.players.map(p => (
-              <div key={p.id} className={`w-8 h-8 rounded-full border-2 border-white flex items-center justify-center bg-slate-200 text-sm ${p.hasEscaped ? 'ring-2 ring-amber-400 bg-amber-100' : ''}`} title={p.name}>
+              <div
+                key={p.id}
+                className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-sm transition-all ${
+                  p.id === currentPlayer?.id ? 'ring-2 ring-blue-400 scale-110 z-10' :
+                  p.hasEscaped ? 'bg-amber-100' : 'bg-slate-100'
+                }`}
+                title={`${p.name} (¥${p.cash.toLocaleString()})`}
+              >
                 {p.avatar}
               </div>
             ))}

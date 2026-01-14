@@ -1,4 +1,87 @@
-import { GameCard, Player, LifeGoal } from './types';
+import { GameCard, Player, LifeGoal, DifficultySettings, AIBehavior } from './types';
+
+// Difficulty Settings by Age
+export const DIFFICULTY_SETTINGS: DifficultySettings[] = [
+  {
+    id: 'kids',
+    name: 'キッズモード',
+    description: 'お金の基本を楽しく学ぼう！',
+    ageRange: '6-10歳',
+    goalMultiplier: 0.5,
+    startingCashMultiplier: 2,
+    expenseMultiplier: 0.5,
+    eventFrequency: 'low',
+  },
+  {
+    id: 'teen',
+    name: 'ティーンモード',
+    description: '投資と節約のバランスを学ぼう！',
+    ageRange: '11-15歳',
+    goalMultiplier: 0.8,
+    startingCashMultiplier: 1.5,
+    expenseMultiplier: 0.8,
+    eventFrequency: 'medium',
+  },
+  {
+    id: 'adult',
+    name: 'チャレンジモード',
+    description: 'リアルな経済状況で挑戦！',
+    ageRange: '16歳以上',
+    goalMultiplier: 1,
+    startingCashMultiplier: 1,
+    expenseMultiplier: 1,
+    eventFrequency: 'high',
+  },
+];
+
+// AI Behavior patterns by personality
+export const AI_BEHAVIORS: Record<string, AIBehavior> = {
+  // エンジニア - 慎重で計算高い
+  engineer: {
+    personality: 'cautious',
+    buyThreshold: 0.4,
+    charityChance: 0.2,
+    riskTolerance: 0.3,
+    supportChance: 0.5,
+    catchphrase: 'データを分析してみると...',
+  },
+  // 先生 - バランス型で寄付好き
+  teacher: {
+    personality: 'charitable',
+    buyThreshold: 0.5,
+    charityChance: 0.7,
+    riskTolerance: 0.4,
+    supportChance: 0.8,
+    catchphrase: '子どもたちのために使いたいな',
+  },
+  // デザイナー - 冒険的でトレンドに敏感
+  designer: {
+    personality: 'aggressive',
+    buyThreshold: 0.7,
+    charityChance: 0.3,
+    riskTolerance: 0.8,
+    supportChance: 0.4,
+    catchphrase: 'このチャンス、逃せない！',
+  },
+  // 医者 - 安定重視
+  doctor: {
+    personality: 'balanced',
+    buyThreshold: 0.5,
+    charityChance: 0.5,
+    riskTolerance: 0.5,
+    supportChance: 0.6,
+    catchphrase: '長期的な視点で考えよう',
+  },
+  // 起業家 - ギャンブラー
+  entrepreneur: {
+    personality: 'gambler',
+    buyThreshold: 0.9,
+    charityChance: 0.1,
+    riskTolerance: 0.95,
+    supportChance: 0.3,
+    catchphrase: 'ビッグチャンス！全力で行く！',
+  },
+};
 
 // Life Goals - Players choose one at game start
 export const LIFE_GOALS: LifeGoal[] = [
@@ -68,15 +151,16 @@ export const INITIAL_PLAYERS: Player[] = [
     id: 'p2',
     name: 'マナブ',
     type: 'AI',
-    avatar: '🤖',
+    avatar: '💻',
     cash: 800,
     jobTitle: 'エンジニア',
     salary: 2500,
+    aiBehavior: AI_BEHAVIORS.engineer,
     assets: [],
     liabilities: [],
     dreams: [],
     monthlyExpenses: 1500,
-    passiveIncome: 0,
+    passiveIncome: 80,
     hasEscaped: false,
     position: 0,
     selectedGoal: null,
@@ -87,10 +171,11 @@ export const INITIAL_PLAYERS: Player[] = [
     id: 'p3',
     name: 'ヒカリ',
     type: 'AI',
-    avatar: '🦊',
+    avatar: '👩‍🏫',
     cash: 1200,
     jobTitle: '先生',
     salary: 1800,
+    aiBehavior: AI_BEHAVIORS.teacher,
     assets: [],
     liabilities: [],
     dreams: [],
@@ -106,10 +191,11 @@ export const INITIAL_PLAYERS: Player[] = [
     id: 'p4',
     name: 'タクミ',
     type: 'AI',
-    avatar: '🦁',
+    avatar: '🎨',
     cash: 500,
     jobTitle: 'デザイナー',
     salary: 2200,
+    aiBehavior: AI_BEHAVIORS.designer,
     assets: [],
     liabilities: [],
     dreams: [],
@@ -122,6 +208,49 @@ export const INITIAL_PLAYERS: Player[] = [
     supportBonus: 0,
   },
 ];
+
+// Random events that can happen (for more engaging gameplay)
+export const RANDOM_EVENTS = [
+  { id: 'bonus', message: '🎉 ボーナスが出た！', effect: 'cash', amount: 500 },
+  { id: 'tax', message: '😱 追加の税金が発生！', effect: 'cash', amount: -200 },
+  { id: 'gift', message: '🎁 親戚からお祝い金！', effect: 'cash', amount: 300 },
+  { id: 'repair', message: '🔧 家電が故障した！', effect: 'cash', amount: -150 },
+  { id: 'lucky', message: '🍀 宝くじに当選！', effect: 'cash', amount: 1000 },
+  { id: 'medical', message: '🏥 急な医療費が発生', effect: 'cash', amount: -300 },
+];
+
+// AI dialog messages based on situation
+export const AI_DIALOGS = {
+  buy: [
+    'これは買いだ！',
+    '投資のチャンス！',
+    'よし、購入しよう',
+    'リターンが期待できそう',
+  ],
+  pass: [
+    'うーん、今回はパス',
+    'もう少し様子を見よう',
+    '慎重に行こう',
+    '次のチャンスを待とう',
+  ],
+  donate: [
+    '社会に貢献したい',
+    '寄付は未来への投資',
+    '困っている人を助けたい',
+    'いいことをすると気持ちいい',
+  ],
+  escape: [
+    'やったー！脱出成功！',
+    'ついに自由を手に入れた！',
+    '投資家の仲間入りだ！',
+    '新しいステージへ！',
+  ],
+  support: [
+    '仲間を助けよう',
+    'みんなで成功しよう',
+    '協力すれば強くなれる',
+  ],
+};
 
 // --- Rat Race Cards ---
 
