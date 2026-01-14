@@ -1,12 +1,38 @@
 export type PlayerType = 'HUMAN' | 'AI';
 
+// Age/Difficulty levels
+export type DifficultyLevel = 'kids' | 'teen' | 'adult';
+
+export interface DifficultySettings {
+  id: DifficultyLevel;
+  name: string;
+  description: string;
+  ageRange: string;
+  goalMultiplier: number; // Multiply goal required cash
+  startingCashMultiplier: number;
+  expenseMultiplier: number;
+  eventFrequency: 'low' | 'medium' | 'high';
+}
+
+// AI Personality types based on job/character
+export type AIPersonality = 'cautious' | 'balanced' | 'aggressive' | 'charitable' | 'gambler';
+
+export interface AIBehavior {
+  personality: AIPersonality;
+  buyThreshold: number; // % of cash willing to spend on opportunity
+  charityChance: number; // % chance to donate when able
+  riskTolerance: number; // 0-1, higher = more likely to buy expensive items
+  supportChance: number; // % chance to support others when on Fast Track
+  catchphrase: string; // Character-specific dialog
+}
+
 // Life goals that players choose at game start
 export interface LifeGoal {
   id: string;
   title: string;
   description: string;
   icon: string;
-  requiredCash: number; // Cash needed to achieve this dream
+  requiredCash: number; // Cash needed to achieve this dream (base value)
 }
 
 export interface Asset {
@@ -33,16 +59,19 @@ export interface Player {
   cash: number;
   jobTitle: string;
   salary: number;
-  
+
+  // AI Behavior (only for AI players)
+  aiBehavior?: AIBehavior;
+
   // Financial Statement
   assets: Asset[];
   liabilities: Liability[];
   dreams: GameCard[]; // Collected dreams
-  
+
   // Dynamic Stats
   monthlyExpenses: number; // Base living cost + liability payments
   passiveIncome: number;   // Sum of asset cashflow
-  
+
   hasEscaped: boolean; // True if on Fast Track
   position: number; // Board position 0-11
 
@@ -89,10 +118,16 @@ export interface GameState {
   isCoachLoading: boolean;
   coachMessage: string | null;
 
+  // Difficulty setting
+  difficulty: DifficultyLevel;
+
   // Goal selection phase tracking
   goalSelectingPlayerIndex: number;
 
   // Support action (Fast Track player helping Rat Race player)
   supportTargetId: string | null;
   supportType: 'JOB' | 'INVESTMENT' | null;
+
+  // Special event message (for more engaging gameplay)
+  eventMessage: string | null;
 }
