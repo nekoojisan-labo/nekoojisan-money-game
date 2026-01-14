@@ -69,6 +69,21 @@ export default function App() {
   const [showCoopModal, setShowCoopModal] = useState(false);
   const [coopResult, setCoopResult] = useState<{ accepted: boolean; supporter: string; amount: number } | null>(null);
 
+  // Joint purchase product selection modal
+  const [showJointPurchaseModal, setShowJointPurchaseModal] = useState(false);
+  const [jointPurchaseResult, setJointPurchaseResult] = useState<{ success: boolean; product: string; contributors: string } | null>(null);
+
+  // Joint purchase products (不動産、株、サービス)
+  const JOINT_PURCHASE_PRODUCTS: GameCard[] = [
+    { id: 'jp1', type: 'OPPORTUNITY', title: '🏠 小さなアパート', description: '3DKの中古マンション', cost: 500, cashflow: 100 },
+    { id: 'jp2', type: 'OPPORTUNITY', title: '🏢 激安な戸建', description: 'リフォームで高利回り', cost: 300, cashflow: 80 },
+    { id: 'jp3', type: 'OPPORTUNITY', title: '📈 株式投資 (IT企業)', description: '成長中の企業に投資', cost: 100, cashflow: 10 },
+    { id: 'jp4', type: 'OPPORTUNITY', title: '🥤 自動販売機', description: '安定した小さな収入', cost: 200, cashflow: 40 },
+    { id: 'jp5', type: 'OPPORTUNITY', title: '🧺 コインランドリー', description: '地域密着サービス', cost: 1000, cashflow: 250 },
+    { id: 'jp6', type: 'OPPORTUNITY', title: '💻 Webサービス', description: 'サブスク型収入', cost: 400, cashflow: 60 },
+    { id: 'jp7', type: 'OPPORTUNITY', title: '🚗 駐車場経営', description: '土地活用ビジネス', cost: 600, cashflow: 120 },
+  ];
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll logs
@@ -500,21 +515,25 @@ export default function App() {
     setGameState(prev => ({ ...prev, phase: 'END_TURN' }));
   };
 
-  // --- Joint Purchase (共同購入) ---
-  const handleJointPurchase = () => {
-    if (!gameState.currentCard || !currentPlayer) return;
+  // --- Joint Purchase (共同購入) - Select product from list ---
+  const handleJointPurchaseSelect = (product: GameCard) => {
+    if (!currentPlayer) return;
 
-    const cost = gameState.currentCard.cost || 0;
-    const cashflow = gameState.currentCard.cashflow || 0;
-    const shortage = cost - currentPlayer.cash;
+    const cost = product.cost || 0;
+    const cashflow = product.cashflow || 0;
+    const shortage = Math.max(0, cost - currentPlayer.cash);
 
     // Find AI players who could help
     const aiHelpers = gameState.players.filter(p =>
       p.type === 'AI' && p.id !== currentPlayer.id && p.cash >= 100
     );
 
-    if (aiHelpers.length === 0) {
+    if (aiHelpers.length === 0 && shortage > 0) {
+      setJointPurchaseResult({ success: false, product: product.title, contributors: '' });
       addLog('共同購入できる仲間がいません...');
+      setTimeout(() => {
+        setJointPurchaseResult(null);
+      }, 2000);
       return;
     }
 
@@ -537,12 +556,11 @@ export default function App() {
         const baseAmount = behavior.personality === 'charitable' ? 300 :
                           behavior.personality === 'balanced' ? 200 :
                           behavior.personality === 'cautious' ? 100 : 150;
-        const contribution = Math.min(baseAmount, maxContribution, shortage - totalContribution);
+        const contribution = Math.min(baseAmount, maxContribution, Math.max(0, shortage - totalContribution));
 
         if (contribution > 0) {
           totalContribution += contribution;
           contributors.push({ id: ai.id, name: ai.name, amount: contribution });
-          showAiSpeech(ai.name, getRandomDialog('support'));
         }
 
         if (totalContribution >= shortage) break;
@@ -571,7 +589,7 @@ export default function App() {
         // Add asset to player
         const newAsset: Asset = {
           id: Date.now().toString(),
-          name: gameState.currentCard!.title,
+          name: product.title,
           cost,
           cashflow,
           type: 'BUSINESS'
@@ -586,19 +604,44 @@ export default function App() {
           player.position = 0;
         }
 
-        return { ...prev, players: updatedPlayers, phase: 'END_TURN' };
+        return { ...prev, players: updatedPlayers };
       });
 
-      const contribNames = contributors.map(c => `${c.name}(¥${c.amount})`).join(', ');
-      addLog(`🤝 共同購入成功！ ${contribNames} の協力で「${gameState.currentCard.title}」を購入！`);
+      const contribNames = contributors.length > 0
+        ? contributors.map(c => `${c.name}(¥${c.amount})`).join(', ')
+        : '単独購入';
+
+      setJointPurchaseResult({ success: true, product: product.title, contributors: contribNames });
+      addLog(`🤝 共同購入成功！ ${contribNames} で「${product.title}」を購入！(収入+${cashflow}/月)`);
 
       if (!currentPlayer.hasEscaped && (currentPlayer.passiveIncome + cashflow) >= currentPlayer.monthlyExpenses) {
         addLog(`🎉 おめでとう！！ ${currentPlayer.name} はラットレースを脱出した！`);
       }
+
+      if (contributors.length > 0) {
+        const supporter = contributors[0];
+        showAiSpeech(supporter.name, getRandomDialog('support'));
+      }
+
+      // Close modal after showing result
+      setTimeout(() => {
+        setShowJointPurchaseModal(false);
+        setJointPurchaseResult(null);
+      }, 2500);
     } else {
       // Failed - not enough contribution
+      setJointPurchaseResult({ success: false, product: product.title, contributors: '' });
       addLog(`共同購入失敗... 協力が集まりませんでした（必要: ¥${shortage}, 集まった: ¥${totalContribution}）`);
+      setTimeout(() => {
+        setJointPurchaseResult(null);
+      }, 2000);
     }
+  };
+
+  // Legacy function for DECISION phase joint purchase
+  const handleJointPurchase = () => {
+    if (!gameState.currentCard) return;
+    handleJointPurchaseSelect(gameState.currentCard);
   };
 
   // --- Support Actions (Fast Track helping Rat Race) ---
@@ -1162,12 +1205,12 @@ export default function App() {
                   >
                     売却
                   </button>
-                  {/* 協力ボタン（共同購入）- 常に表示 */}
+                  {/* 共同購入ボタン - 常に表示 */}
                   <button
-                    onClick={() => setShowCoopModal(true)}
+                    onClick={() => setShowJointPurchaseModal(true)}
                     className="px-2 py-1.5 text-xs bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 font-medium"
                   >
-                    協力
+                    共同購入
                   </button>
                   {/* 支援ボタン - Fast Trackプレイヤー用 */}
                   {isFastTrack && ratRacePlayers.length > 0 && (
@@ -1248,45 +1291,64 @@ export default function App() {
         </div>
       )}
 
-      {/* Cooperation Modal (共同購入 - Joint Purchase) */}
-      {showCoopModal && (
+      {/* Joint Purchase Modal (共同購入 - Product Selection) */}
+      {showJointPurchaseModal && (
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 animate-in zoom-in-95 duration-200">
-            {!coopResult ? (
-              <div className="text-center">
-                <div className="text-4xl mb-3">🤝</div>
-                <h3 className="text-lg font-bold text-slate-800 mb-2">共同購入</h3>
-                <p className="text-sm text-slate-600 mb-3">
-                  仲間と一緒に株や不動産を購入しよう！
-                </p>
-                <div className="bg-purple-50 p-3 rounded-lg mb-4 text-left">
-                  <p className="text-xs text-purple-700 mb-1">💡 共同購入のメリット</p>
-                  <ul className="text-xs text-slate-600 space-y-1">
-                    <li>• 高い資産も協力すれば買える</li>
-                    <li>• 仲間からの資金援助を受けられる</li>
-                    <li>• 相手の性格で協力率が変わる</li>
-                  </ul>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 animate-in zoom-in-95 duration-200 max-h-[80vh] overflow-y-auto">
+            {!jointPurchaseResult ? (
+              <div>
+                <div className="text-center mb-4">
+                  <div className="text-3xl mb-2">🤝</div>
+                  <h3 className="text-lg font-bold text-slate-800">共同購入</h3>
+                  <p className="text-xs text-slate-500">仲間と一緒に購入しよう！</p>
+                  <p className="text-xs text-purple-600 mt-1">所持金: ¥{currentPlayer?.cash.toLocaleString()}</p>
                 </div>
 
-                <div className="space-y-2">
-                  <Button onClick={requestCooperation} className="w-full bg-purple-600 hover:bg-purple-700">
-                    協力を求める
-                  </Button>
-                  <Button variant="outline" onClick={() => setShowCoopModal(false)} className="w-full">
-                    やめる
-                  </Button>
+                <div className="space-y-2 mb-4">
+                  {JOINT_PURCHASE_PRODUCTS.map(product => {
+                    const canAffordAlone = (currentPlayer?.cash || 0) >= (product.cost || 0);
+                    return (
+                      <button
+                        key={product.id}
+                        onClick={() => handleJointPurchaseSelect(product)}
+                        className="w-full p-3 bg-slate-50 rounded-lg border border-slate-200 hover:border-purple-400 hover:bg-purple-50 text-left transition-all"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-bold text-sm">{product.title}</div>
+                            <div className="text-[10px] text-slate-500">{product.description}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`text-sm font-bold ${canAffordAlone ? 'text-green-600' : 'text-red-500'}`}>
+                              ¥{product.cost?.toLocaleString()}
+                            </div>
+                            <div className="text-[10px] text-blue-600">+{product.cashflow}/月</div>
+                          </div>
+                        </div>
+                        {!canAffordAlone && (
+                          <div className="text-[10px] text-purple-600 mt-1">
+                            🤝 協力で購入可能
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
+
+                <Button variant="outline" onClick={() => setShowJointPurchaseModal(false)} className="w-full">
+                  閉じる
+                </Button>
               </div>
             ) : (
               <div className="text-center">
-                <div className="text-4xl mb-3">{coopResult.accepted ? '🎉' : '😢'}</div>
+                <div className="text-4xl mb-3">{jointPurchaseResult.success ? '🎉' : '😢'}</div>
                 <h3 className="text-lg font-bold text-slate-800 mb-2">
-                  {coopResult.accepted ? '共同購入成功！' : '断られた...'}
+                  {jointPurchaseResult.success ? '購入成功！' : '購入失敗...'}
                 </h3>
                 <p className="text-sm text-slate-600">
-                  {coopResult.accepted
-                    ? `${coopResult.supporter}が¥${coopResult.amount.toLocaleString()}を出資してくれました！`
-                    : `${coopResult.supporter}は今回は協力できないようです...`}
+                  {jointPurchaseResult.success
+                    ? `「${jointPurchaseResult.product}」を${jointPurchaseResult.contributors}で購入！`
+                    : '協力が集まりませんでした...'}
                 </p>
               </div>
             )}
@@ -1461,12 +1523,11 @@ export default function App() {
                           </Button>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button variant="outline" onClick={handlePass} className="text-sm">
-                            パス
-                          </Button>
-                          <Button variant="danger" onClick={handlePayDoodad} className="text-sm">
-                            支払う
+                        /* トラブルカード（DOODAD/AUDIT）- パス不可、支払い必須 */
+                        <div className="space-y-2">
+                          <p className="text-xs text-red-500 text-center">⚠️ この支払いは避けられません</p>
+                          <Button variant="danger" onClick={handlePayDoodad} className="text-sm w-full">
+                            支払う（¥{gameState.currentCard.cost?.toLocaleString()}）
                           </Button>
                         </div>
                       )}
