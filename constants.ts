@@ -224,6 +224,92 @@ export const RANDOM_EVENTS = [
   { id: 'medical', message: '🏥 急な医療費が発生', effect: 'cash', amount: -300 },
 ];
 
+// Market events - investment gains and losses
+export const MARKET_CARDS: GameCard[] = [
+  // === 損失イベント ===
+  {
+    id: 'market_crash',
+    type: 'MARKET',
+    title: '📉 株価暴落',
+    description: '世界的な経済危機で株価が暴落！株式資産の収益が半減...',
+    cost: 0,
+    cashflow: -50, // 株式資産のcashflowを50%減少
+  },
+  {
+    id: 'vacancy',
+    type: 'MARKET',
+    title: '🏚️ 空室発生',
+    description: '入居者が退去してしまった。修繕費がかかります。',
+    cost: 100,
+    cashflow: 0,
+  },
+  {
+    id: 'business_slump',
+    type: 'MARKET',
+    title: '📊 景気後退',
+    description: '消費者の財布のひもが固くなり、ビジネスの売上が減少。',
+    cost: 0,
+    cashflow: -30, // 全資産のcashflowを一時的に30%減少
+  },
+  {
+    id: 'bankruptcy',
+    type: 'MARKET',
+    title: '💸 投資先倒産',
+    description: '投資していた会社が倒産！資産が一つ消滅...',
+    cost: 0,
+    cashflow: -100, // 資産を1つ失う
+  },
+  {
+    id: 'fraud',
+    type: 'MARKET',
+    title: '🦹 詐欺被害',
+    description: '投資詐欺に遭ってしまった！現金を失う。',
+    cost: 300,
+    cashflow: 0,
+  },
+  // === 利益イベント ===
+  {
+    id: 'bull_market',
+    type: 'MARKET',
+    title: '📈 株価高騰',
+    description: '経済好調で株価が急上昇！配当金ボーナス！',
+    cost: -200, // マイナスのコスト = 現金がもらえる
+    cashflow: 0,
+  },
+  {
+    id: 'rent_increase',
+    type: 'MARKET',
+    title: '🏠 家賃値上げ成功',
+    description: '物件の人気が高まり、家賃を値上げできた！',
+    cost: 0,
+    cashflow: 20, // 不動産資産のcashflowが20増加
+  },
+  {
+    id: 'business_boom',
+    type: 'MARKET',
+    title: '🎊 ビジネス繁盛',
+    description: 'あなたのビジネスが口コミで大人気に！',
+    cost: -150,
+    cashflow: 0,
+  },
+  {
+    id: 'tax_refund',
+    type: 'MARKET',
+    title: '💰 税金還付',
+    description: '確定申告で経費が認められ、還付金をゲット！',
+    cost: -100,
+    cashflow: 0,
+  },
+  {
+    id: 'inheritance',
+    type: 'MARKET',
+    title: '🎁 遺産相続',
+    description: '遠い親戚から思いがけない遺産が！',
+    cost: -500,
+    cashflow: 0,
+  },
+];
+
 // AI dialog messages based on situation
 export const AI_DIALOGS = {
   buy: [
@@ -265,6 +351,18 @@ export const AI_DIALOGS = {
     'ありがとう！',
     '助かります！',
     '感謝します！',
+  ],
+  marketGain: [
+    'ラッキー！市場が味方した！',
+    '投資が報われた！',
+    'いい波に乗れた！',
+    '好調な市場だ！',
+  ],
+  marketLoss: [
+    'まさか...こんなことが...',
+    '市場は厳しいな...',
+    'これも勉強だ...',
+    '次は気をつけよう...',
   ],
 };
 

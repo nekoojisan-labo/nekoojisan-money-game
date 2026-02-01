@@ -5,7 +5,8 @@ import {
 import {
   INITIAL_PLAYERS, BOARD_SPACES, BOARD_SIZE, FAST_TRACK_SPACES,
   OPPORTUNITY_CARDS, DOODAD_CARDS, FAST_TRACK_OPPORTUNITIES, FAST_TRACK_DOODADS,
-  LIFE_GOALS, CHARITY_CARDS, SUPPORT_OPTIONS, DIFFICULTY_SETTINGS, AI_DIALOGS, RANDOM_EVENTS
+  LIFE_GOALS, CHARITY_CARDS, SUPPORT_OPTIONS, DIFFICULTY_SETTINGS, AI_DIALOGS, RANDOM_EVENTS,
+  MARKET_CARDS
 } from './constants';
 import { GameBoard } from './components/GameBoard';
 import { FinancialSheet } from './components/FinancialSheet';
@@ -409,6 +410,12 @@ export default function App() {
         setGameState(prev => ({ ...prev, currentCard: randomCard, phase: 'DECISION' }));
         addLog(`${currentPlayer.name}は夢のアイテム「${randomCard.title}」を見つけました！`);
       }
+    } else if (type === 'MARKET') {
+      // Market event - investment gains or losses
+      const randomCard = MARKET_CARDS[Math.floor(Math.random() * MARKET_CARDS.length)];
+      setGameState(prev => ({ ...prev, currentCard: randomCard, phase: 'DECISION' }));
+      const isGoodEvent = (randomCard.cost || 0) < 0 || (randomCard.cashflow || 0) > 0;
+      addLog(`${currentPlayer.name}に市場イベント発生！「${randomCard.title}」`);
     } else {
       addLog(`特別なイベントは発生しませんでした。`);
       setGameState(prev => ({ ...prev, phase: 'END_TURN' }));
@@ -508,6 +515,76 @@ export default function App() {
       return { ...prev, players: updatedPlayers, phase: 'END_TURN' };
     });
     addLog(`${currentPlayer.name}は${cost}を支払いました。`);
+  };
+
+  // Handle Market Event (investment gains/losses)
+  const handleMarketEvent = () => {
+    if (!gameState.currentCard) return;
+
+    const card = gameState.currentCard;
+    const cost = card.cost || 0;
+    const cashflowEffect = card.cashflow || 0;
+
+    setGameState(prev => {
+      const updatedPlayers = [...prev.players];
+      const player = updatedPlayers[prev.currentPlayerIndex];
+
+      // Handle cash effect (negative cost = gain, positive cost = loss)
+      if (cost !== 0) {
+        player.cash -= cost; // cost is negative for gains, positive for losses
+      }
+
+      // Handle cashflow effects on assets
+      if (cashflowEffect !== 0 && player.assets.length > 0) {
+        if (cashflowEffect === -100) {
+          // Bankruptcy: lose a random asset
+          const randomIndex = Math.floor(Math.random() * player.assets.length);
+          const lostAsset = player.assets[randomIndex];
+          player.passiveIncome -= lostAsset.cashflow;
+          player.assets.splice(randomIndex, 1);
+          addLog(`😱 ${player.name}の「${lostAsset.name}」が倒産で消滅！(収入 -${lostAsset.cashflow}/月)`);
+        } else if (cashflowEffect < 0) {
+          // Reduce cashflow percentage on random asset
+          const stockAssets = player.assets.filter(a => a.type === 'STOCK');
+          const targetAssets = stockAssets.length > 0 ? stockAssets : player.assets;
+          if (targetAssets.length > 0) {
+            const randomAsset = targetAssets[Math.floor(Math.random() * targetAssets.length)];
+            const reduction = Math.floor(randomAsset.cashflow * Math.abs(cashflowEffect) / 100);
+            if (reduction > 0) {
+              randomAsset.cashflow = Math.max(0, randomAsset.cashflow - reduction);
+              player.passiveIncome = player.assets.reduce((sum, a) => sum + a.cashflow, 0);
+              addLog(`📉 ${player.name}の「${randomAsset.name}」の収益が${reduction}減少！`);
+            }
+          }
+        } else if (cashflowEffect > 0) {
+          // Increase cashflow on random asset
+          const realEstateAssets = player.assets.filter(a => a.type === 'REAL_ESTATE');
+          const targetAssets = realEstateAssets.length > 0 ? realEstateAssets : player.assets;
+          if (targetAssets.length > 0) {
+            const randomAsset = targetAssets[Math.floor(Math.random() * targetAssets.length)];
+            randomAsset.cashflow += cashflowEffect;
+            player.passiveIncome = player.assets.reduce((sum, a) => sum + a.cashflow, 0);
+            addLog(`📈 ${player.name}の「${randomAsset.name}」の収益が${cashflowEffect}増加！`);
+          }
+        }
+      }
+
+      // Check escape condition after market event
+      if (!player.hasEscaped && player.passiveIncome >= player.monthlyExpenses) {
+        player.hasEscaped = true;
+        player.cash += 100000;
+        player.position = 0;
+      }
+
+      return { ...prev, players: updatedPlayers, phase: 'END_TURN' };
+    });
+
+    // Log the overall event result
+    if (cost < 0) {
+      addLog(`💰 ${currentPlayer.name}は${Math.abs(cost)}を獲得！`);
+    } else if (cost > 0) {
+      addLog(`💸 ${currentPlayer.name}は${cost}を失った...`);
+    }
   };
 
   const handlePass = () => {
@@ -925,6 +1002,18 @@ export default function App() {
 
           if (['DOODAD', 'AUDIT'].includes(card.type)) {
             handlePayDoodad();
+            return;
+          }
+
+          // Handle MARKET events (forced, no decision)
+          if (card.type === 'MARKET') {
+            const isGoodEvent = (card.cost || 0) < 0 || (card.cashflow || 0) > 0;
+            if (isGoodEvent) {
+              showAiSpeech(currentPlayer.name, getRandomDialog('marketGain'));
+            } else {
+              showAiSpeech(currentPlayer.name, getRandomDialog('marketLoss'));
+            }
+            handleMarketEvent();
             return;
           }
 
@@ -1449,12 +1538,14 @@ export default function App() {
                 {/* Card Type Badge */}
                 <span className={`inline-block text-xs font-bold px-2 py-1 rounded mb-2 ${
                   gameState.currentCard.type === 'CHARITY' ? 'bg-pink-100 text-pink-700' :
+                  gameState.currentCard.type === 'MARKET' ? ((gameState.currentCard.cost || 0) < 0 || (gameState.currentCard.cashflow || 0) > 0 ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700') :
                   ['OPPORTUNITY', 'BUSINESS', 'DREAM'].includes(gameState.currentCard.type) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                 }`}>
                   {gameState.currentCard.type === 'OPPORTUNITY' ? 'チャンス！' :
                    gameState.currentCard.type === 'BUSINESS' ? 'ビジネス！' :
                    gameState.currentCard.type === 'DREAM' ? '夢' :
                    gameState.currentCard.type === 'CHARITY' ? '寄付' :
+                   gameState.currentCard.type === 'MARKET' ? '市場イベント' :
                    '支払い'}
                 </span>
 
@@ -1463,11 +1554,33 @@ export default function App() {
 
                 {/* Cost & Benefit */}
                 <div className="flex justify-center gap-4 mb-3 text-sm">
-                  {gameState.currentCard.cost !== undefined && gameState.currentCard.cost > 0 && (
-                    <span className="text-red-600 font-bold">コスト: -{gameState.currentCard.cost.toLocaleString()}</span>
-                  )}
-                  {gameState.currentCard.cashflow && gameState.currentCard.cashflow > 0 && (
-                    <span className="text-green-600 font-bold">収入: +{gameState.currentCard.cashflow.toLocaleString()}/月</span>
+                  {gameState.currentCard.type === 'MARKET' ? (
+                    <>
+                      {(gameState.currentCard.cost || 0) < 0 && (
+                        <span className="text-green-600 font-bold">+¥{Math.abs(gameState.currentCard.cost || 0).toLocaleString()}</span>
+                      )}
+                      {(gameState.currentCard.cost || 0) > 0 && (
+                        <span className="text-red-600 font-bold">-¥{(gameState.currentCard.cost || 0).toLocaleString()}</span>
+                      )}
+                      {(gameState.currentCard.cashflow || 0) > 0 && (
+                        <span className="text-blue-600 font-bold">収益UP +{gameState.currentCard.cashflow}/月</span>
+                      )}
+                      {(gameState.currentCard.cashflow || 0) < 0 && (gameState.currentCard.cashflow || 0) !== -100 && (
+                        <span className="text-orange-600 font-bold">収益DOWN {gameState.currentCard.cashflow}%</span>
+                      )}
+                      {gameState.currentCard.cashflow === -100 && (
+                        <span className="text-red-600 font-bold">⚠️ 資産消滅</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {gameState.currentCard.cost !== undefined && gameState.currentCard.cost > 0 && (
+                        <span className="text-red-600 font-bold">コスト: -{gameState.currentCard.cost.toLocaleString()}</span>
+                      )}
+                      {gameState.currentCard.cashflow && gameState.currentCard.cashflow > 0 && (
+                        <span className="text-green-600 font-bold">収入: +{gameState.currentCard.cashflow.toLocaleString()}/月</span>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -1506,6 +1619,25 @@ export default function App() {
                           </Button>
                           <Button onClick={handleDonate} disabled={currentPlayer.cash < (gameState.currentCard.cost === 0 ? Math.floor((currentPlayer.salary + currentPlayer.passiveIncome) * 0.1) : gameState.currentCard.cost)} className="bg-pink-500 hover:bg-pink-600 text-sm">
                             寄付する
+                          </Button>
+                        </div>
+                      ) : gameState.currentCard.type === 'MARKET' ? (
+                        /* 市場イベント - 強制適用 */
+                        <div className="space-y-2">
+                          {(gameState.currentCard.cost || 0) < 0 || (gameState.currentCard.cashflow || 0) > 0 ? (
+                            <p className="text-xs text-blue-500 text-center">🎉 ラッキー！良いことが起きた！</p>
+                          ) : (
+                            <p className="text-xs text-orange-500 text-center">⚠️ 市場の変動は避けられません...</p>
+                          )}
+                          <Button
+                            onClick={handleMarketEvent}
+                            className={`text-sm w-full ${
+                              (gameState.currentCard.cost || 0) < 0 || (gameState.currentCard.cashflow || 0) > 0
+                                ? 'bg-blue-500 hover:bg-blue-600'
+                                : 'bg-orange-500 hover:bg-orange-600'
+                            }`}
+                          >
+                            確認する
                           </Button>
                         </div>
                       ) : ['OPPORTUNITY', 'BUSINESS', 'DREAM'].includes(gameState.currentCard.type) ? (
