@@ -105,7 +105,14 @@ export interface GameLog {
   timestamp: number;
 }
 
-export type GamePhase = 'SETUP' | 'GOAL_SELECT' | 'ROLL' | 'MOVE' | 'ACTION' | 'DECISION' | 'SUPPORT' | 'END_TURN' | 'GAME_OVER';
+export type GamePhase = 'SETUP' | 'PLAYER_SELECT' | 'GOAL_SELECT' | 'ROLL' | 'MOVE' | 'ACTION' | 'DECISION' | 'SUPPORT' | 'END_TURN' | 'GAME_OVER';
+
+// Player selection state for setup
+export interface PlayerSetup {
+  characterId: string;
+  isActive: boolean;  // Whether this player is in the game
+  isHuman: boolean;   // true = human, false = AI
+}
 
 export interface GameState {
   players: Player[];

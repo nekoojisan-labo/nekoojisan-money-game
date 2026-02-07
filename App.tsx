@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Player, GameState, GamePhase, GameCard, GameLog, Asset, LifeGoal, DifficultyLevel
+  Player, GameState, GamePhase, GameCard, GameLog, Asset, LifeGoal, DifficultyLevel, PlayerSetup
 } from './types';
 import {
   INITIAL_PLAYERS, BOARD_SPACES, BOARD_SIZE, FAST_TRACK_SPACES,
   OPPORTUNITY_CARDS, DOODAD_CARDS, FAST_TRACK_OPPORTUNITIES, FAST_TRACK_DOODADS,
   LIFE_GOALS, CHARITY_CARDS, SUPPORT_OPTIONS, DIFFICULTY_SETTINGS, AI_DIALOGS, RANDOM_EVENTS,
-  MARKET_CARDS
+  MARKET_CARDS, CHARACTER_TEMPLATES, AI_BEHAVIORS
 } from './constants';
 import { GameBoard } from './components/GameBoard';
 import { FinancialSheet } from './components/FinancialSheet';
@@ -39,6 +39,49 @@ const applyDifficultyToGoals = (goals: LifeGoal[], difficulty: DifficultyLevel):
   }));
 };
 
+// Create players from setup configuration
+const createPlayersFromSetup = (playerSetups: PlayerSetup[], difficulty: DifficultyLevel): Player[] => {
+  const settings = DIFFICULTY_SETTINGS.find(d => d.id === difficulty)!;
+
+  return playerSetups
+    .filter(setup => setup.isActive)
+    .map((setup, index) => {
+      const template = CHARACTER_TEMPLATES.find(c => c.id === setup.characterId)!;
+      const aiBehavior = template.aiBehaviorKey
+        ? AI_BEHAVIORS[template.aiBehaviorKey]
+        : AI_BEHAVIORS.engineer; // Default behavior for humans playing as AI
+
+      return {
+        id: `p${index + 1}`,
+        name: template.name,
+        type: setup.isHuman ? 'HUMAN' : 'AI',
+        avatar: template.avatar,
+        cash: Math.floor(template.cash * settings.startingCashMultiplier),
+        jobTitle: template.jobTitle,
+        salary: template.salary,
+        aiBehavior: setup.isHuman ? undefined : aiBehavior,
+        assets: [],
+        liabilities: [...template.liabilities],
+        dreams: [],
+        monthlyExpenses: Math.floor(template.monthlyExpenses * settings.expenseMultiplier),
+        passiveIncome: template.passiveIncome,
+        hasEscaped: false,
+        position: 0,
+        selectedGoal: null,
+        charityTurnsRemaining: 0,
+        supportBonus: 0,
+      } as Player;
+    });
+};
+
+// Default player setup - 1 human + 3 AI
+const DEFAULT_PLAYER_SETUPS: PlayerSetup[] = [
+  { characterId: 'char1', isActive: true, isHuman: true },
+  { characterId: 'char2', isActive: true, isHuman: false },
+  { characterId: 'char3', isActive: true, isHuman: false },
+  { characterId: 'char4', isActive: true, isHuman: false },
+];
+
 export default function App() {
   // --- Game State ---
   const [gameState, setGameState] = useState<GameState>({
@@ -59,6 +102,9 @@ export default function App() {
     supportRequest: null,
     eventMessage: null,
   });
+
+  // Player setup state (for selecting players before game starts)
+  const [playerSetups, setPlayerSetups] = useState<PlayerSetup[]>(DEFAULT_PLAYER_SETUPS);
 
   // AI speech bubble state
   const [aiSpeech, setAiSpeech] = useState<{ name: string; message: string } | null>(null);
@@ -171,13 +217,45 @@ export default function App() {
     setTimeout(() => setAiSpeech(null), 2500);
   };
 
-  // Set difficulty and start game
+  // Set difficulty and go to player selection
   const selectDifficulty = (difficulty: DifficultyLevel) => {
-    const adjustedPlayers = applyDifficultyToPlayers(JSON.parse(JSON.stringify(INITIAL_PLAYERS)), difficulty);
     setGameState(prev => ({
       ...prev,
       difficulty,
-      players: adjustedPlayers,
+      phase: 'PLAYER_SELECT',
+    }));
+  };
+
+  // Toggle player active state
+  const togglePlayerActive = (characterId: string) => {
+    setPlayerSetups(prev => {
+      const activeCount = prev.filter(p => p.isActive).length;
+      const target = prev.find(p => p.characterId === characterId);
+
+      // Must have at least 1 player
+      if (target?.isActive && activeCount <= 1) return prev;
+
+      return prev.map(p =>
+        p.characterId === characterId ? { ...p, isActive: !p.isActive } : p
+      );
+    });
+  };
+
+  // Toggle player type (human/AI)
+  const togglePlayerType = (characterId: string) => {
+    setPlayerSetups(prev =>
+      prev.map(p =>
+        p.characterId === characterId ? { ...p, isHuman: !p.isHuman } : p
+      )
+    );
+  };
+
+  // Start game with selected players
+  const startGameWithPlayers = () => {
+    const players = createPlayersFromSetup(playerSetups, gameState.difficulty);
+    setGameState(prev => ({
+      ...prev,
+      players,
       phase: 'GOAL_SELECT',
       goalSelectingPlayerIndex: 0,
     }));
@@ -262,6 +340,7 @@ export default function App() {
       supportType: null,
       eventMessage: null,
     });
+    setPlayerSetups(DEFAULT_PLAYER_SETUPS);
     setAiSpeech(null);
   };
 
@@ -1132,6 +1211,113 @@ export default function App() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- PLAYER SELECTION ---
+  if (gameState.phase === 'PLAYER_SELECT') {
+    const activePlayerCount = playerSetups.filter(p => p.isActive).length;
+    const humanPlayerCount = playerSetups.filter(p => p.isActive && p.isHuman).length;
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-400 to-purple-500 p-4">
+        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-lg w-full">
+          <div className="text-center mb-4">
+            <div className="text-4xl mb-2">👥</div>
+            <h2 className="text-xl font-bold text-slate-800 mb-1">プレイヤー設定</h2>
+            <p className="text-slate-500 text-sm">参加するプレイヤーを選んでね（1〜4人）</p>
+          </div>
+
+          {/* Player Cards */}
+          <div className="space-y-3 mb-5">
+            {CHARACTER_TEMPLATES.map(template => {
+              const setup = playerSetups.find(p => p.characterId === template.id)!;
+              return (
+                <div
+                  key={template.id}
+                  className={`p-3 rounded-xl border-2 transition-all ${
+                    setup.isActive
+                      ? 'border-indigo-400 bg-indigo-50'
+                      : 'border-slate-200 bg-slate-50 opacity-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {/* Toggle Active */}
+                      <button
+                        onClick={() => togglePlayerActive(template.id)}
+                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
+                          setup.isActive
+                            ? 'border-green-500 bg-green-500 text-white'
+                            : 'border-slate-300 bg-white text-slate-300'
+                        }`}
+                      >
+                        {setup.isActive ? '✓' : ''}
+                      </button>
+
+                      {/* Avatar & Name */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{template.avatar}</span>
+                        <div>
+                          <div className="font-bold text-sm text-slate-700">{template.name}</div>
+                          <div className="text-[10px] text-slate-500">{template.jobTitle}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Human/AI Toggle */}
+                    {setup.isActive && (
+                      <button
+                        onClick={() => togglePlayerType(template.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          setup.isHuman
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-amber-500 text-white'
+                        }`}
+                      >
+                        {setup.isHuman ? '👤 人間' : '🤖 AI'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Summary */}
+          <div className="bg-slate-100 p-3 rounded-lg mb-4 text-center">
+            <div className="flex justify-center gap-6 text-sm">
+              <span className="text-slate-600">
+                <span className="font-bold text-indigo-600">{activePlayerCount}</span> 人参加
+              </span>
+              <span className="text-slate-600">
+                👤 <span className="font-bold text-blue-600">{humanPlayerCount}</span> 人
+              </span>
+              <span className="text-slate-600">
+                🤖 <span className="font-bold text-amber-600">{activePlayerCount - humanPlayerCount}</span> 人
+              </span>
+            </div>
+          </div>
+
+          {/* Start Button */}
+          <Button
+            size="lg"
+            onClick={startGameWithPlayers}
+            disabled={activePlayerCount < 1}
+            className="w-full"
+          >
+            ゲーム開始！ 🎮
+          </Button>
+
+          {/* Back Button */}
+          <button
+            onClick={() => setGameState(prev => ({ ...prev, phase: 'SETUP' }))}
+            className="w-full mt-2 text-sm text-slate-500 hover:text-slate-700"
+          >
+            ← 難易度選択に戻る
+          </button>
         </div>
       </div>
     );
