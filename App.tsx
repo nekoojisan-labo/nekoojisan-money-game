@@ -6,7 +6,7 @@ import {
   INITIAL_PLAYERS, BOARD_SPACES, BOARD_SIZE, FAST_TRACK_SPACES,
   OPPORTUNITY_CARDS, DOODAD_CARDS, FAST_TRACK_OPPORTUNITIES, FAST_TRACK_DOODADS,
   LIFE_GOALS, CHARITY_CARDS, SUPPORT_OPTIONS, DIFFICULTY_SETTINGS, AI_DIALOGS, RANDOM_EVENTS,
-  MARKET_CARDS, CHARACTER_TEMPLATES, AI_BEHAVIORS
+  MARKET_CARDS, CHARACTER_TEMPLATES, AI_BEHAVIORS, JOB_CARDS
 } from './constants';
 import { GameBoard } from './components/GameBoard';
 import { FinancialSheet } from './components/FinancialSheet';
@@ -40,46 +40,46 @@ const applyDifficultyToGoals = (goals: LifeGoal[], difficulty: DifficultyLevel):
 };
 
 // Create players from setup configuration
-const createPlayersFromSetup = (playerSetups: PlayerSetup[], difficulty: DifficultyLevel): Player[] => {
+const createPlayersFromSetup = (playerSetups: PlayerSetup[], difficulty: DifficultyLevel, goals: LifeGoal[]): Player[] => {
   const settings = DIFFICULTY_SETTINGS.find(d => d.id === difficulty)!;
 
   return playerSetups
-    .filter(setup => setup.isActive)
+    .filter(setup => setup.isActive && setup.jobId && setup.goalId)
     .map((setup, index) => {
       const template = CHARACTER_TEMPLATES.find(c => c.id === setup.characterId)!;
-      const aiBehavior = template.aiBehaviorKey
-        ? AI_BEHAVIORS[template.aiBehaviorKey]
-        : AI_BEHAVIORS.engineer; // Default behavior for humans playing as AI
+      const job = JOB_CARDS.find(j => j.id === setup.jobId)!;
+      const goal = goals.find(g => g.id === setup.goalId) || null;
+      const aiBehavior = AI_BEHAVIORS[job.aiBehaviorKey] || AI_BEHAVIORS.balanced;
 
       return {
         id: `p${index + 1}`,
         name: template.name,
         type: setup.isHuman ? 'HUMAN' : 'AI',
         avatar: template.avatar,
-        cash: Math.floor(template.cash * settings.startingCashMultiplier),
-        jobTitle: template.jobTitle,
-        salary: template.salary,
+        cash: Math.floor(job.startingCash * settings.startingCashMultiplier),
+        jobTitle: job.title,
+        salary: job.salary,
         aiBehavior: setup.isHuman ? undefined : aiBehavior,
         assets: [],
-        liabilities: [...template.liabilities],
+        liabilities: [...job.liabilities],
         dreams: [],
-        monthlyExpenses: Math.floor(template.monthlyExpenses * settings.expenseMultiplier),
-        passiveIncome: template.passiveIncome,
+        monthlyExpenses: Math.floor(job.monthlyExpenses * settings.expenseMultiplier),
+        passiveIncome: job.passiveIncome,
         hasEscaped: false,
         position: 0,
-        selectedGoal: null,
+        selectedGoal: goal,
         charityTurnsRemaining: 0,
         supportBonus: 0,
       } as Player;
     });
 };
 
-// Default player setup - 1 human + 3 AI
+// Default player setup - 1 human + 3 AI (no job/goal selected yet)
 const DEFAULT_PLAYER_SETUPS: PlayerSetup[] = [
-  { characterId: 'char1', isActive: true, isHuman: true },
-  { characterId: 'char2', isActive: true, isHuman: false },
-  { characterId: 'char3', isActive: true, isHuman: false },
-  { characterId: 'char4', isActive: true, isHuman: false },
+  { characterId: 'char1', isActive: true, isHuman: true, goalId: null, jobId: null },
+  { characterId: 'char2', isActive: true, isHuman: false, goalId: null, jobId: null },
+  { characterId: 'char3', isActive: true, isHuman: false, goalId: null, jobId: null },
+  { characterId: 'char4', isActive: true, isHuman: false, goalId: null, jobId: null },
 ];
 
 export default function App() {
@@ -97,6 +97,7 @@ export default function App() {
     coachMessage: null,
     difficulty: 'teen',
     goalSelectingPlayerIndex: 0,
+    jobSelectingPlayerIndex: 0,
     supportTargetId: null,
     supportType: null,
     supportRequest: null,
@@ -250,77 +251,130 @@ export default function App() {
     );
   };
 
-  // Start game with selected players
-  const startGameWithPlayers = () => {
-    const players = createPlayersFromSetup(playerSetups, gameState.difficulty);
+  // Go to goal selection phase
+  const goToGoalSelect = () => {
     setGameState(prev => ({
       ...prev,
-      players,
       phase: 'GOAL_SELECT',
       goalSelectingPlayerIndex: 0,
     }));
   };
 
-  const startGoalSelection = () => {
-    setGameState(prev => ({ ...prev, phase: 'GOAL_SELECT', goalSelectingPlayerIndex: 0 }));
+  // Select goal for current player (during setup)
+  const selectGoalForSetup = (goalId: string) => {
+    const activeSetups = playerSetups.filter(p => p.isActive);
+    const currentIndex = gameState.goalSelectingPlayerIndex;
+    const currentSetup = activeSetups[currentIndex];
+
+    // Update player setup with selected goal
+    setPlayerSetups(prev =>
+      prev.map(p =>
+        p.characterId === currentSetup.characterId ? { ...p, goalId } : p
+      )
+    );
+
+    const template = CHARACTER_TEMPLATES.find(c => c.id === currentSetup.characterId)!;
+    const goal = adjustedGoals.find(g => g.id === goalId)!;
+    addLog(`${template.name}は「${goal.title}」を人生の目標に選びました！`);
+
+    // Move to next player or job selection
+    const nextIndex = currentIndex + 1;
+    if (nextIndex >= activeSetups.length) {
+      setGameState(prev => ({
+        ...prev,
+        phase: 'JOB_SELECT',
+        goalSelectingPlayerIndex: 0,
+        jobSelectingPlayerIndex: 0,
+      }));
+    } else {
+      setGameState(prev => ({
+        ...prev,
+        goalSelectingPlayerIndex: nextIndex,
+      }));
+    }
+  };
+
+  // Select job for current player (during setup)
+  const selectJobForSetup = (jobId: string) => {
+    const activeSetups = playerSetups.filter(p => p.isActive);
+    const currentIndex = gameState.jobSelectingPlayerIndex;
+    const currentSetup = activeSetups[currentIndex];
+
+    // Update player setup with selected job
+    setPlayerSetups(prev =>
+      prev.map(p =>
+        p.characterId === currentSetup.characterId ? { ...p, jobId } : p
+      )
+    );
+
+    const template = CHARACTER_TEMPLATES.find(c => c.id === currentSetup.characterId)!;
+    const job = JOB_CARDS.find(j => j.id === jobId)!;
+    addLog(`${template.name}は「${job.title}」の仕事を選びました！`);
+
+    // Move to next player or start game
+    const nextIndex = currentIndex + 1;
+    if (nextIndex >= activeSetups.length) {
+      // All selections complete - create players and start game
+      // Need to use updated playerSetups, so we'll do it in the next tick
+      setTimeout(() => startGameWithAllSelections(jobId, currentSetup.characterId), 100);
+    } else {
+      setGameState(prev => ({
+        ...prev,
+        jobSelectingPlayerIndex: nextIndex,
+      }));
+    }
+  };
+
+  // Start game after all selections are complete
+  const startGameWithAllSelections = (lastJobId: string, lastCharId: string) => {
+    // Apply the last job selection
+    const finalSetups = playerSetups.map(p =>
+      p.characterId === lastCharId ? { ...p, jobId: lastJobId } : p
+    );
+    const players = createPlayersFromSetup(finalSetups, gameState.difficulty, adjustedGoals);
+    setGameState(prev => ({
+      ...prev,
+      players,
+      phase: 'ROLL',
+      goalSelectingPlayerIndex: 0,
+      jobSelectingPlayerIndex: 0,
+    }));
+    addLog('全員の準備が整いました！ゲーム開始！');
   };
 
   // Get adjusted goals based on difficulty
   const adjustedGoals = applyDifficultyToGoals(LIFE_GOALS, gameState.difficulty);
 
-  const selectGoal = (goal: LifeGoal) => {
-    setGameState(prev => {
-      const updatedPlayers = [...prev.players];
-      const selectingPlayer = updatedPlayers[prev.goalSelectingPlayerIndex];
-      selectingPlayer.selectedGoal = goal;
-
-      addLog(`${selectingPlayer.name}は「${goal.title}」を人生の目標に選びました！`);
-
-      const nextIndex = prev.goalSelectingPlayerIndex + 1;
-      if (nextIndex >= prev.players.length) {
-        // All players have selected, start the game
-        return {
-          ...prev,
-          players: updatedPlayers,
-          phase: 'ROLL',
-          goalSelectingPlayerIndex: 0,
-        };
-      }
-
-      return {
-        ...prev,
-        players: updatedPlayers,
-        goalSelectingPlayerIndex: nextIndex,
-      };
-    });
-  };
-
-  // AI auto-selects goal (with personality influence)
+  // AI auto-selects goal (during setup)
   useEffect(() => {
     if (gameState.phase === 'GOAL_SELECT') {
-      const selectingPlayer = gameState.players[gameState.goalSelectingPlayerIndex];
-      if (selectingPlayer && selectingPlayer.type === 'AI') {
+      const activeSetups = playerSetups.filter(p => p.isActive);
+      const currentSetup = activeSetups[gameState.goalSelectingPlayerIndex];
+      if (currentSetup && !currentSetup.isHuman) {
         setTimeout(() => {
           const goals = applyDifficultyToGoals(LIFE_GOALS, gameState.difficulty);
-          // AI personality influences goal choice
-          const behavior = selectingPlayer.aiBehavior;
-          let selectedGoal;
-          if (behavior?.personality === 'aggressive' || behavior?.personality === 'gambler') {
-            // Pick more expensive goals
-            const expensiveGoals = [...goals].sort((a, b) => b.requiredCash - a.requiredCash);
-            selectedGoal = expensiveGoals[Math.floor(Math.random() * 2)]; // Top 2 expensive
-          } else if (behavior?.personality === 'cautious') {
-            // Pick cheaper goals
-            const cheapGoals = [...goals].sort((a, b) => a.requiredCash - b.requiredCash);
-            selectedGoal = cheapGoals[Math.floor(Math.random() * 2)]; // Top 2 cheap
-          } else {
-            selectedGoal = goals[Math.floor(Math.random() * goals.length)];
-          }
-          selectGoal(selectedGoal);
+          // Random goal for AI
+          const selectedGoal = goals[Math.floor(Math.random() * goals.length)];
+          selectGoalForSetup(selectedGoal.id);
         }, 1000);
       }
     }
-  }, [gameState.phase, gameState.goalSelectingPlayerIndex]);
+  }, [gameState.phase, gameState.goalSelectingPlayerIndex, playerSetups]);
+
+  // AI auto-selects job (during setup)
+  useEffect(() => {
+    if (gameState.phase === 'JOB_SELECT') {
+      const activeSetups = playerSetups.filter(p => p.isActive);
+      const currentSetup = activeSetups[gameState.jobSelectingPlayerIndex];
+      if (currentSetup && !currentSetup.isHuman) {
+        setTimeout(() => {
+          // Random job for AI
+          const selectedJob = JOB_CARDS[Math.floor(Math.random() * JOB_CARDS.length)];
+          selectJobForSetup(selectedJob.id);
+        }, 1000);
+      }
+    }
+  }, [gameState.phase, gameState.jobSelectingPlayerIndex, playerSetups]);
 
   const restartGame = () => {
     setGameState({
@@ -336,6 +390,7 @@ export default function App() {
       coachMessage: null,
       difficulty: 'teen',
       goalSelectingPlayerIndex: 0,
+      jobSelectingPlayerIndex: 0,
       supportTargetId: null,
       supportType: null,
       eventMessage: null,
@@ -1304,11 +1359,11 @@ export default function App() {
           {/* Start Button */}
           <Button
             size="lg"
-            onClick={startGameWithPlayers}
+            onClick={goToGoalSelect}
             disabled={activePlayerCount < 1}
             className="w-full"
           >
-            ゲーム開始！ 🎮
+            次へ：目標を決める 🎯
           </Button>
 
           {/* Back Button */}
@@ -1325,16 +1380,18 @@ export default function App() {
 
   // --- GOAL SELECTION ---
   if (gameState.phase === 'GOAL_SELECT') {
-    const selectingPlayer = gameState.players[gameState.goalSelectingPlayerIndex];
-    const isHumanSelecting = selectingPlayer?.type === 'HUMAN';
+    const activeSetups = playerSetups.filter(p => p.isActive);
+    const currentSetup = activeSetups[gameState.goalSelectingPlayerIndex];
+    const currentTemplate = CHARACTER_TEMPLATES.find(c => c.id === currentSetup?.characterId);
+    const isHumanSelecting = currentSetup?.isHuman;
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-400 to-pink-500 p-4">
         <div className="bg-white p-6 rounded-2xl shadow-xl max-w-xl w-full">
           <div className="text-center mb-4">
-            <div className="text-5xl mb-2">{selectingPlayer?.avatar}</div>
+            <div className="text-5xl mb-2">{currentTemplate?.avatar}</div>
             <h2 className="text-xl font-bold text-slate-800 mb-1">
-              {selectingPlayer?.name}の人生の目標
+              {currentTemplate?.name}の人生の目標
             </h2>
             <p className="text-slate-500 text-sm">投資家コースでこの目標を達成すると勝利！</p>
           </div>
@@ -1344,7 +1401,7 @@ export default function App() {
               {adjustedGoals.map(goal => (
                 <button
                   key={goal.id}
-                  onClick={() => selectGoal(goal)}
+                  onClick={() => selectGoalForSetup(goal.id)}
                   className="p-3 border-2 border-slate-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all text-left group"
                 >
                   <div className="flex items-center gap-2 mb-1">
@@ -1361,24 +1418,96 @@ export default function App() {
           ) : (
             <div className="text-center py-6">
               <div className="animate-bounce text-4xl mb-3">🎯</div>
-              <p className="text-slate-500 text-sm">{selectingPlayer?.name}が目標を選んでいます...</p>
+              <p className="text-slate-500 text-sm">{currentTemplate?.name}が目標を選んでいます...</p>
             </div>
           )}
 
           {/* Progress indicator */}
           <div className="mt-4 flex justify-center gap-1">
-            {gameState.players.map((p, i) => (
-              <div
-                key={p.id}
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${
-                  i < gameState.goalSelectingPlayerIndex ? 'bg-green-100 text-green-600' :
-                  i === gameState.goalSelectingPlayerIndex ? 'bg-purple-100 ring-2 ring-purple-400' :
-                  'bg-slate-100 text-slate-400'
-                }`}
-              >
-                {i < gameState.goalSelectingPlayerIndex ? '✓' : p.avatar}
-              </div>
-            ))}
+            {activeSetups.map((setup, i) => {
+              const template = CHARACTER_TEMPLATES.find(c => c.id === setup.characterId);
+              return (
+                <div
+                  key={setup.characterId}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${
+                    i < gameState.goalSelectingPlayerIndex ? 'bg-green-100 text-green-600' :
+                    i === gameState.goalSelectingPlayerIndex ? 'bg-purple-100 ring-2 ring-purple-400' :
+                    'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  {i < gameState.goalSelectingPlayerIndex ? '✓' : template?.avatar}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- JOB SELECTION ---
+  if (gameState.phase === 'JOB_SELECT') {
+    const activeSetups = playerSetups.filter(p => p.isActive);
+    const currentSetup = activeSetups[gameState.jobSelectingPlayerIndex];
+    const currentTemplate = CHARACTER_TEMPLATES.find(c => c.id === currentSetup?.characterId);
+    const isHumanSelecting = currentSetup?.isHuman;
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-400 to-cyan-500 p-4">
+        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-xl w-full">
+          <div className="text-center mb-4">
+            <div className="text-5xl mb-2">{currentTemplate?.avatar}</div>
+            <h2 className="text-xl font-bold text-slate-800 mb-1">
+              {currentTemplate?.name}の職業を選ぼう
+            </h2>
+            <p className="text-slate-500 text-sm">職業によって給料や支出が変わるよ！</p>
+          </div>
+
+          {isHumanSelecting ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
+              {JOB_CARDS.map(job => (
+                <button
+                  key={job.id}
+                  onClick={() => selectJobForSetup(job.id)}
+                  className="p-3 border-2 border-slate-200 rounded-xl hover:border-teal-400 hover:bg-teal-50 transition-all text-left group"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-2xl">{job.icon}</span>
+                    <h3 className="font-bold text-sm text-slate-800 group-hover:text-teal-600">{job.title}</h3>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-2">{job.description}</p>
+                  <div className="flex flex-wrap gap-2 text-[10px]">
+                    <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded">給料: ¥{job.salary.toLocaleString()}</span>
+                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded">支出: ¥{job.monthlyExpenses.toLocaleString()}</span>
+                    <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">初期資金: ¥{job.startingCash.toLocaleString()}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-6">
+              <div className="animate-bounce text-4xl mb-3">💼</div>
+              <p className="text-slate-500 text-sm">{currentTemplate?.name}が職業を選んでいます...</p>
+            </div>
+          )}
+
+          {/* Progress indicator */}
+          <div className="mt-4 flex justify-center gap-1">
+            {activeSetups.map((setup, i) => {
+              const template = CHARACTER_TEMPLATES.find(c => c.id === setup.characterId);
+              return (
+                <div
+                  key={setup.characterId}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${
+                    i < gameState.jobSelectingPlayerIndex ? 'bg-green-100 text-green-600' :
+                    i === gameState.jobSelectingPlayerIndex ? 'bg-teal-100 ring-2 ring-teal-400' :
+                    'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  {i < gameState.jobSelectingPlayerIndex ? '✓' : template?.avatar}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

@@ -88,72 +88,111 @@ export const AI_BEHAVIORS: Record<string, AIBehavior> = {
   },
 };
 
-// Character Templates - used to create players based on selection
+// Job Cards - players select one at game start
+export interface JobCard {
+  id: string;
+  title: string;
+  icon: string;
+  description: string;
+  salary: number;
+  monthlyExpenses: number;
+  startingCash: number;
+  passiveIncome: number;
+  liabilities: { id: string; name: string; totalAmount: number; monthlyPayment: number }[];
+  aiBehaviorKey: string; // Key to AI_BEHAVIORS for AI players
+}
+
+export const JOB_CARDS: JobCard[] = [
+  {
+    id: 'job_engineer',
+    title: 'エンジニア',
+    icon: '💻',
+    description: 'IT企業で働くプログラマー。給料は高めだが、忙しくて支出も多い。',
+    salary: 2500,
+    monthlyExpenses: 1500,
+    startingCash: 800,
+    passiveIncome: 0,
+    liabilities: [],
+    aiBehaviorKey: 'engineer',
+  },
+  {
+    id: 'job_teacher',
+    title: '先生',
+    icon: '👩‍🏫',
+    description: '学校の先生。給料は控えめだが、安定していて支出も少ない。',
+    salary: 1800,
+    monthlyExpenses: 1000,
+    startingCash: 1200,
+    passiveIncome: 0,
+    liabilities: [],
+    aiBehaviorKey: 'teacher',
+  },
+  {
+    id: 'job_designer',
+    title: 'デザイナー',
+    icon: '🎨',
+    description: 'クリエイティブな仕事。給料は良いが、おしゃれに支出が多い。',
+    salary: 2200,
+    monthlyExpenses: 1600,
+    startingCash: 500,
+    passiveIncome: 0,
+    liabilities: [],
+    aiBehaviorKey: 'designer',
+  },
+  {
+    id: 'job_doctor',
+    title: '医者',
+    icon: '👨‍⚕️',
+    description: '病院で働く医師。高収入だが、学生ローンが残っている。',
+    salary: 3500,
+    monthlyExpenses: 2000,
+    startingCash: 1000,
+    passiveIncome: 0,
+    liabilities: [
+      { id: 'student_loan', name: '学生ローン', totalAmount: 10000, monthlyPayment: 500 },
+    ],
+    aiBehaviorKey: 'doctor',
+  },
+  {
+    id: 'job_entrepreneur',
+    title: '起業家',
+    icon: '🚀',
+    description: 'スタートアップ経営者。収入は不安定だが、夢は大きい。',
+    salary: 1500,
+    monthlyExpenses: 800,
+    startingCash: 2000,
+    passiveIncome: 100,
+    liabilities: [],
+    aiBehaviorKey: 'entrepreneur',
+  },
+  {
+    id: 'job_salesperson',
+    title: '営業マン',
+    icon: '🤝',
+    description: '会社の営業担当。コミュニケーション力で稼ぐ。',
+    salary: 2000,
+    monthlyExpenses: 1200,
+    startingCash: 1000,
+    passiveIncome: 0,
+    liabilities: [
+      { id: 'car_loan', name: '車のローン', totalAmount: 2000, monthlyPayment: 200 },
+    ],
+    aiBehaviorKey: 'balanced',
+  },
+];
+
+// Character Templates - used to create players based on selection (name/avatar only)
 export interface CharacterTemplate {
   id: string;
   name: string;
   avatar: string;
-  jobTitle: string;
-  salary: number;
-  cash: number;
-  monthlyExpenses: number;
-  passiveIncome: number;
-  aiBehaviorKey: string | null; // Key to AI_BEHAVIORS, null for human default
-  liabilities: { id: string; name: string; totalAmount: number; monthlyPayment: number }[];
 }
 
 export const CHARACTER_TEMPLATES: CharacterTemplate[] = [
-  {
-    id: 'char1',
-    name: 'あなた',
-    avatar: '🧑‍🚀',
-    jobTitle: '会社員',
-    salary: 2000,
-    cash: 1000,
-    monthlyExpenses: 1200,
-    passiveIncome: 0,
-    aiBehaviorKey: null,
-    liabilities: [
-      { id: 'l1', name: '住宅ローン', totalAmount: 5000, monthlyPayment: 500 },
-      { id: 'l2', name: '車のローン', totalAmount: 1000, monthlyPayment: 100 },
-    ],
-  },
-  {
-    id: 'char2',
-    name: 'マナブ',
-    avatar: '💻',
-    jobTitle: 'エンジニア',
-    salary: 2500,
-    cash: 800,
-    monthlyExpenses: 1500,
-    passiveIncome: 80,
-    aiBehaviorKey: 'engineer',
-    liabilities: [],
-  },
-  {
-    id: 'char3',
-    name: 'ヒカリ',
-    avatar: '👩‍🏫',
-    jobTitle: '先生',
-    salary: 1800,
-    cash: 1200,
-    monthlyExpenses: 1000,
-    passiveIncome: 0,
-    aiBehaviorKey: 'teacher',
-    liabilities: [],
-  },
-  {
-    id: 'char4',
-    name: 'タクミ',
-    avatar: '🎨',
-    jobTitle: 'デザイナー',
-    salary: 2200,
-    cash: 500,
-    monthlyExpenses: 1600,
-    passiveIncome: 0,
-    aiBehaviorKey: 'designer',
-    liabilities: [],
-  },
+  { id: 'char1', name: 'あなた', avatar: '🧑‍🚀' },
+  { id: 'char2', name: 'マナブ', avatar: '💻' },
+  { id: 'char3', name: 'ヒカリ', avatar: '👩‍🏫' },
+  { id: 'char4', name: 'タクミ', avatar: '🎨' },
 ];
 
 // Life Goals - Players choose one at game start

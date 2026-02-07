@@ -105,13 +105,15 @@ export interface GameLog {
   timestamp: number;
 }
 
-export type GamePhase = 'SETUP' | 'PLAYER_SELECT' | 'GOAL_SELECT' | 'ROLL' | 'MOVE' | 'ACTION' | 'DECISION' | 'SUPPORT' | 'END_TURN' | 'GAME_OVER';
+export type GamePhase = 'SETUP' | 'PLAYER_SELECT' | 'GOAL_SELECT' | 'JOB_SELECT' | 'ROLL' | 'MOVE' | 'ACTION' | 'DECISION' | 'SUPPORT' | 'END_TURN' | 'GAME_OVER';
 
 // Player selection state for setup
 export interface PlayerSetup {
   characterId: string;
   isActive: boolean;  // Whether this player is in the game
   isHuman: boolean;   // true = human, false = AI
+  goalId: string | null; // Selected life goal ID
+  jobId: string | null; // Selected job card ID
 }
 
 export interface GameState {
@@ -131,6 +133,9 @@ export interface GameState {
 
   // Goal selection phase tracking
   goalSelectingPlayerIndex: number;
+
+  // Job selection phase tracking
+  jobSelectingPlayerIndex: number;
 
   // Support action (Fast Track player helping Rat Race player)
   supportTargetId: string | null;
