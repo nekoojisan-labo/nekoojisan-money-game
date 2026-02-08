@@ -84,6 +84,9 @@ export interface Player {
 
   // Support received from Fast Track players
   supportBonus: number; // One-time bonus from other players
+
+  // Bank loan (borrowed money with interest)
+  bankLoan: number; // Total outstanding loan amount
 }
 
 export type CardType = 'OPPORTUNITY' | 'DOODAD' | 'MARKET' | 'CHARITY' | 'PAYCHECK' | 'BUSINESS' | 'DREAM' | 'AUDIT';
@@ -105,7 +108,7 @@ export interface GameLog {
   timestamp: number;
 }
 
-export type GamePhase = 'SETUP' | 'PLAYER_SELECT' | 'GOAL_SELECT' | 'JOB_SELECT' | 'ROLL' | 'MOVE' | 'ACTION' | 'DECISION' | 'SUPPORT' | 'END_TURN' | 'GAME_OVER';
+export type GamePhase = 'SETUP' | 'PLAYER_SELECT' | 'GOAL_SELECT' | 'JOB_SELECT' | 'ROLL' | 'MOVE' | 'ACTION' | 'DECISION' | 'SUPPORT' | 'DEBT' | 'END_TURN' | 'GAME_OVER';
 
 // Player selection state for setup
 export interface PlayerSetup {
@@ -150,4 +153,7 @@ export interface GameState {
 
   // Special event message (for more engaging gameplay)
   eventMessage: string | null;
+
+  // Track if player has taken an action this turn (joint purchase, etc.)
+  hasActedThisTurn: boolean;
 }

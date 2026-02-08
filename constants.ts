@@ -34,6 +34,28 @@ export const DIFFICULTY_SETTINGS: DifficultySettings[] = [
   },
 ];
 
+// Interest rate settings by difficulty (monthly rate)
+export const LOAN_SETTINGS: Record<string, { interestRate: number; minLoan: number; loanUnit: number; explanation: string }> = {
+  kids: {
+    interestRate: 0.05, // 5% per turn (simplified for kids)
+    minLoan: 100,
+    loanUnit: 100,
+    explanation: '銀行からお金を借りると、返す時に少し多く返さないといけないよ！100円借りたら、次のターンで105円になるんだ。',
+  },
+  teen: {
+    interestRate: 0.10, // 10% per turn
+    minLoan: 500,
+    loanUnit: 500,
+    explanation: '銀行ローンには利息がつきます。借りたお金は毎ターン10%ずつ増えていくので、早めに返済しましょう！',
+  },
+  adult: {
+    interestRate: 0.15, // 15% per turn (realistic challenge)
+    minLoan: 1000,
+    loanUnit: 1000,
+    explanation: '銀行ローンは毎ターン15%の利息がかかります。複利で膨らむ前に計画的な返済を心がけましょう。',
+  },
+};
+
 // AI Behavior patterns by personality
 export const AI_BEHAVIORS: Record<string, AIBehavior> = {
   // エンジニア - 慎重で計算高い、協力要請は控えめ
@@ -428,6 +450,7 @@ export const INITIAL_PLAYERS: Player[] = [
     selectedGoal: null,
     charityTurnsRemaining: 0,
     supportBonus: 0,
+    bankLoan: 0,
   },
   {
     id: 'p2',
@@ -448,6 +471,7 @@ export const INITIAL_PLAYERS: Player[] = [
     selectedGoal: null,
     charityTurnsRemaining: 0,
     supportBonus: 0,
+    bankLoan: 0,
   },
   {
     id: 'p3',
@@ -468,6 +492,7 @@ export const INITIAL_PLAYERS: Player[] = [
     selectedGoal: null,
     charityTurnsRemaining: 0,
     supportBonus: 0,
+    bankLoan: 0,
   },
   {
     id: 'p4',
@@ -488,6 +513,7 @@ export const INITIAL_PLAYERS: Player[] = [
     selectedGoal: null,
     charityTurnsRemaining: 0,
     supportBonus: 0,
+    bankLoan: 0,
   },
 ];
 
