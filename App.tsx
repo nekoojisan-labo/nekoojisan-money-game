@@ -107,6 +107,16 @@ export default function App() {
   // Player setup state (for selecting players before game starts)
   const [playerSetups, setPlayerSetups] = useState<PlayerSetup[]>(DEFAULT_PLAYER_SETUPS);
 
+  // Refs to always access latest state (avoids stale closure issues in async callbacks)
+  const playerSetupsRef = useRef<PlayerSetup[]>(playerSetups);
+  const gameStateRef = useRef<GameState>(gameState);
+  useEffect(() => {
+    playerSetupsRef.current = playerSetups;
+  }, [playerSetups]);
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
   // AI speech bubble state
   const [aiSpeech, setAiSpeech] = useState<{ name: string; message: string } | null>(null);
 
@@ -317,9 +327,15 @@ export default function App() {
     const jobIdToUse = overrideJobId || drawnJobId;
     if (!jobIdToUse) return;
 
-    const activeSetups = playerSetups.filter(p => p.isActive);
-    const currentIndex = gameState.jobSelectingPlayerIndex;
+    // Use refs to get latest state (avoids stale closure issues in async callbacks)
+    const latestSetups = playerSetupsRef.current;
+    const latestGameState = gameStateRef.current;
+
+    const activeSetups = latestSetups.filter(p => p.isActive);
+    const currentIndex = latestGameState.jobSelectingPlayerIndex;
     const currentSetup = activeSetups[currentIndex];
+
+    if (!currentSetup) return; // Safety check
 
     // Update player setup with drawn job
     setPlayerSetups(prev =>
@@ -347,8 +363,10 @@ export default function App() {
 
   // Start game after all selections are complete
   const startGameWithAllSelections = (lastJobId: string, lastCharId: string) => {
+    // Use ref to get latest playerSetups (avoids stale closure issues)
+    const latestSetups = playerSetupsRef.current;
     // Apply the last job selection
-    const finalSetups = playerSetups.map(p =>
+    const finalSetups = latestSetups.map(p =>
       p.characterId === lastCharId ? { ...p, jobId: lastJobId } : p
     );
     const players = createPlayersFromSetup(finalSetups, gameState.difficulty, adjustedGoals);
