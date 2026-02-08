@@ -53,7 +53,7 @@ const createPlayersFromSetup = (playerSetups: PlayerSetup[], difficulty: Difficu
 
       return {
         id: `p${index + 1}`,
-        name: template.name,
+        name: setup.customName || template.name,
         type: setup.isHuman ? 'HUMAN' : 'AI',
         avatar: template.avatar,
         cash: Math.floor(job.startingCash * settings.startingCashMultiplier),
@@ -76,10 +76,10 @@ const createPlayersFromSetup = (playerSetups: PlayerSetup[], difficulty: Difficu
 
 // Default player setup - 1 human + 3 AI (no job/goal selected yet)
 const DEFAULT_PLAYER_SETUPS: PlayerSetup[] = [
-  { characterId: 'char1', isActive: true, isHuman: true, goalId: null, jobId: null },
-  { characterId: 'char2', isActive: true, isHuman: false, goalId: null, jobId: null },
-  { characterId: 'char3', isActive: true, isHuman: false, goalId: null, jobId: null },
-  { characterId: 'char4', isActive: true, isHuman: false, goalId: null, jobId: null },
+  { characterId: 'char1', isActive: true, isHuman: true, customName: 'プレイヤー1', goalId: null, jobId: null },
+  { characterId: 'char2', isActive: true, isHuman: false, customName: 'マナブ', goalId: null, jobId: null },
+  { characterId: 'char3', isActive: true, isHuman: false, customName: 'ヒカリ', goalId: null, jobId: null },
+  { characterId: 'char4', isActive: true, isHuman: false, customName: 'タクミ', goalId: null, jobId: null },
 ];
 
 export default function App() {
@@ -251,6 +251,15 @@ export default function App() {
     );
   };
 
+  // Update player name
+  const updatePlayerName = (characterId: string, name: string) => {
+    setPlayerSetups(prev =>
+      prev.map(p =>
+        p.characterId === characterId ? { ...p, customName: name } : p
+      )
+    );
+  };
+
   // Go to goal selection phase
   const goToGoalSelect = () => {
     setGameState(prev => ({
@@ -273,9 +282,8 @@ export default function App() {
       )
     );
 
-    const template = CHARACTER_TEMPLATES.find(c => c.id === currentSetup.characterId)!;
     const goal = adjustedGoals.find(g => g.id === goalId)!;
-    addLog(`${template.name}は「${goal.title}」を人生の目標に選びました！`);
+    addLog(`${currentSetup.customName}は「${goal.title}」を人生の目標に選びました！`);
 
     // Move to next player or job selection
     const nextIndex = currentIndex + 1;
@@ -307,9 +315,8 @@ export default function App() {
       )
     );
 
-    const template = CHARACTER_TEMPLATES.find(c => c.id === currentSetup.characterId)!;
     const job = JOB_CARDS.find(j => j.id === jobId)!;
-    addLog(`${template.name}は「${job.title}」の仕事を選びました！`);
+    addLog(`${currentSetup.customName}は「${job.title}」の仕事を選びました！`);
 
     // Move to next player or start game
     const nextIndex = currentIndex + 1;
@@ -1315,10 +1322,17 @@ export default function App() {
                       {/* Avatar & Name */}
                       <div className="flex items-center gap-2">
                         <span className="text-2xl">{template.avatar}</span>
-                        <div>
-                          <div className="font-bold text-sm text-slate-700">{template.name}</div>
-                          <div className="text-[10px] text-slate-500">{template.jobTitle}</div>
-                        </div>
+                        {setup.isActive && setup.isHuman ? (
+                          <input
+                            type="text"
+                            value={setup.customName}
+                            onChange={(e) => updatePlayerName(template.id, e.target.value)}
+                            className="font-bold text-sm text-slate-700 border-b-2 border-indigo-300 bg-transparent focus:outline-none focus:border-indigo-500 w-24"
+                            placeholder="名前"
+                          />
+                        ) : (
+                          <div className="font-bold text-sm text-slate-700">{setup.customName}</div>
+                        )}
                       </div>
                     </div>
 
@@ -1391,7 +1405,7 @@ export default function App() {
           <div className="text-center mb-4">
             <div className="text-5xl mb-2">{currentTemplate?.avatar}</div>
             <h2 className="text-xl font-bold text-slate-800 mb-1">
-              {currentTemplate?.name}の人生の目標
+              {currentSetup?.customName}の人生の目標
             </h2>
             <p className="text-slate-500 text-sm">投資家コースでこの目標を達成すると勝利！</p>
           </div>
@@ -1418,7 +1432,7 @@ export default function App() {
           ) : (
             <div className="text-center py-6">
               <div className="animate-bounce text-4xl mb-3">🎯</div>
-              <p className="text-slate-500 text-sm">{currentTemplate?.name}が目標を選んでいます...</p>
+              <p className="text-slate-500 text-sm">{currentSetup?.customName}が目標を選んでいます...</p>
             </div>
           )}
 
@@ -1458,7 +1472,7 @@ export default function App() {
           <div className="text-center mb-4">
             <div className="text-5xl mb-2">{currentTemplate?.avatar}</div>
             <h2 className="text-xl font-bold text-slate-800 mb-1">
-              {currentTemplate?.name}の職業を選ぼう
+              {currentSetup?.customName}の職業を選ぼう
             </h2>
             <p className="text-slate-500 text-sm">職業によって給料や支出が変わるよ！</p>
           </div>
@@ -1487,7 +1501,7 @@ export default function App() {
           ) : (
             <div className="text-center py-6">
               <div className="animate-bounce text-4xl mb-3">💼</div>
-              <p className="text-slate-500 text-sm">{currentTemplate?.name}が職業を選んでいます...</p>
+              <p className="text-slate-500 text-sm">{currentSetup?.customName}が職業を選んでいます...</p>
             </div>
           )}
 
