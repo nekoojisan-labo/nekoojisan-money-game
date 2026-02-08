@@ -121,6 +121,9 @@ export default function App() {
   const [showJointPurchaseModal, setShowJointPurchaseModal] = useState(false);
   const [jointPurchaseResult, setJointPurchaseResult] = useState<{ success: boolean; product: string; contributors: string } | null>(null);
 
+  // Drawn job card state (for job selection phase)
+  const [drawnJobId, setDrawnJobId] = useState<string | null>(null);
+
   // Joint purchase products (不動産、株、サービス)
   const JOINT_PURCHASE_PRODUCTS: GameCard[] = [
     { id: 'jp1', type: 'OPPORTUNITY', title: '🏠 小さなアパート', description: '3DKの中古マンション', cost: 500, cashflow: 100 },
@@ -303,27 +306,36 @@ export default function App() {
   };
 
   // Select job for current player (during setup)
-  const selectJobForSetup = (jobId: string) => {
+  // Draw a random job card
+  const drawJobCard = () => {
+    const randomJob = JOB_CARDS[Math.floor(Math.random() * JOB_CARDS.length)];
+    setDrawnJobId(randomJob.id);
+  };
+
+  // Confirm the drawn job card
+  const confirmDrawnJob = () => {
+    if (!drawnJobId) return;
+
     const activeSetups = playerSetups.filter(p => p.isActive);
     const currentIndex = gameState.jobSelectingPlayerIndex;
     const currentSetup = activeSetups[currentIndex];
 
-    // Update player setup with selected job
+    // Update player setup with drawn job
     setPlayerSetups(prev =>
       prev.map(p =>
-        p.characterId === currentSetup.characterId ? { ...p, jobId } : p
+        p.characterId === currentSetup.characterId ? { ...p, jobId: drawnJobId } : p
       )
     );
 
-    const job = JOB_CARDS.find(j => j.id === jobId)!;
-    addLog(`${currentSetup.customName}は「${job.title}」の仕事を選びました！`);
+    const job = JOB_CARDS.find(j => j.id === drawnJobId)!;
+    addLog(`${currentSetup.customName}は「${job.title}」のカードを引きました！`);
 
-    // Move to next player or start game
+    // Reset drawn card and move to next player or start game
+    setDrawnJobId(null);
     const nextIndex = currentIndex + 1;
     if (nextIndex >= activeSetups.length) {
       // All selections complete - create players and start game
-      // Need to use updated playerSetups, so we'll do it in the next tick
-      setTimeout(() => startGameWithAllSelections(jobId, currentSetup.characterId), 100);
+      setTimeout(() => startGameWithAllSelections(drawnJobId, currentSetup.characterId), 100);
     } else {
       setGameState(prev => ({
         ...prev,
@@ -368,16 +380,20 @@ export default function App() {
     }
   }, [gameState.phase, gameState.goalSelectingPlayerIndex, playerSetups]);
 
-  // AI auto-selects job (during setup)
+  // AI auto-draws job card (during setup)
   useEffect(() => {
     if (gameState.phase === 'JOB_SELECT') {
       const activeSetups = playerSetups.filter(p => p.isActive);
       const currentSetup = activeSetups[gameState.jobSelectingPlayerIndex];
       if (currentSetup && !currentSetup.isHuman) {
+        // AI draws and confirms automatically
         setTimeout(() => {
-          // Random job for AI
-          const selectedJob = JOB_CARDS[Math.floor(Math.random() * JOB_CARDS.length)];
-          selectJobForSetup(selectedJob.id);
+          const randomJob = JOB_CARDS[Math.floor(Math.random() * JOB_CARDS.length)];
+          setDrawnJobId(randomJob.id);
+          // Auto-confirm after a short delay
+          setTimeout(() => {
+            confirmDrawnJob();
+          }, 1500);
         }, 1000);
       }
     }
@@ -1459,49 +1475,76 @@ export default function App() {
     );
   }
 
-  // --- JOB SELECTION ---
+  // --- JOB SELECTION (Card Draw) ---
   if (gameState.phase === 'JOB_SELECT') {
     const activeSetups = playerSetups.filter(p => p.isActive);
     const currentSetup = activeSetups[gameState.jobSelectingPlayerIndex];
     const currentTemplate = CHARACTER_TEMPLATES.find(c => c.id === currentSetup?.characterId);
     const isHumanSelecting = currentSetup?.isHuman;
+    const drawnJob = drawnJobId ? JOB_CARDS.find(j => j.id === drawnJobId) : null;
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-400 to-cyan-500 p-4">
-        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-xl w-full">
+        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-md w-full">
           <div className="text-center mb-4">
             <div className="text-5xl mb-2">{currentTemplate?.avatar}</div>
             <h2 className="text-xl font-bold text-slate-800 mb-1">
-              {currentSetup?.customName}の職業を選ぼう
+              {currentSetup?.customName}の職業カード
             </h2>
-            <p className="text-slate-500 text-sm">職業によって給料や支出が変わるよ！</p>
+            <p className="text-slate-500 text-sm">カードを引いて職業を決めよう！</p>
           </div>
 
           {isHumanSelecting ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
-              {JOB_CARDS.map(job => (
-                <button
-                  key={job.id}
-                  onClick={() => selectJobForSetup(job.id)}
-                  className="p-3 border-2 border-slate-200 rounded-xl hover:border-teal-400 hover:bg-teal-50 transition-all text-left group"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-2xl">{job.icon}</span>
-                    <h3 className="font-bold text-sm text-slate-800 group-hover:text-teal-600">{job.title}</h3>
+            <div className="text-center">
+              {!drawnJob ? (
+                /* カードを引く前 */
+                <div className="py-8">
+                  <div className="w-32 h-44 mx-auto bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl shadow-lg flex items-center justify-center mb-6 hover:scale-105 transition-transform cursor-pointer" onClick={drawJobCard}>
+                    <span className="text-5xl">🃏</span>
                   </div>
-                  <p className="text-xs text-slate-500 mb-2">{job.description}</p>
-                  <div className="flex flex-wrap gap-2 text-[10px]">
-                    <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded">給料: ¥{job.salary.toLocaleString()}</span>
-                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded">支出: ¥{job.monthlyExpenses.toLocaleString()}</span>
-                    <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">初期資金: ¥{job.startingCash.toLocaleString()}</span>
+                  <Button size="lg" onClick={drawJobCard} className="bg-teal-600 hover:bg-teal-700">
+                    カードを引く！
+                  </Button>
+                </div>
+              ) : (
+                /* カードを引いた後 */
+                <div className="py-4 animate-in zoom-in-95 duration-300">
+                  <div className="bg-gradient-to-br from-amber-50 to-yellow-100 p-5 rounded-xl border-2 border-amber-300 shadow-lg mb-4">
+                    <div className="text-4xl mb-2">{drawnJob.icon}</div>
+                    <h3 className="text-xl font-bold text-slate-800 mb-1">{drawnJob.title}</h3>
+                    <p className="text-sm text-slate-600 mb-3">{drawnJob.description}</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="bg-green-100 text-green-700 px-2 py-1 rounded">
+                        💰 給料: ¥{drawnJob.salary.toLocaleString()}
+                      </div>
+                      <div className="bg-red-100 text-red-700 px-2 py-1 rounded">
+                        💸 支出: ¥{drawnJob.monthlyExpenses.toLocaleString()}
+                      </div>
+                      <div className="bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                        🏦 初期資金: ¥{drawnJob.startingCash.toLocaleString()}
+                      </div>
+                      {drawnJob.passiveIncome > 0 && (
+                        <div className="bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                          📈 不労所得: ¥{drawnJob.passiveIncome}
+                        </div>
+                      )}
+                    </div>
+                    {drawnJob.liabilities.length > 0 && (
+                      <div className="mt-2 text-xs text-orange-600">
+                        ⚠️ 借金: {drawnJob.liabilities.map(l => l.name).join(', ')}
+                      </div>
+                    )}
                   </div>
-                </button>
-              ))}
+                  <Button size="lg" onClick={confirmDrawnJob} className="bg-teal-600 hover:bg-teal-700 w-full">
+                    この職業でスタート！
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-6">
-              <div className="animate-bounce text-4xl mb-3">💼</div>
-              <p className="text-slate-500 text-sm">{currentSetup?.customName}が職業を選んでいます...</p>
+              <div className="animate-bounce text-4xl mb-3">🃏</div>
+              <p className="text-slate-500 text-sm">{currentSetup?.customName}がカードを引いています...</p>
             </div>
           )}
 
