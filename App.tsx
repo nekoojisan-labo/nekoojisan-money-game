@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Player, GameState, GamePhase, GameCard, GameLog, Asset, LifeGoal, DifficultyLevel
+  Player, GameState, GamePhase, GameCard, GameLog, Asset, LifeGoal, DifficultyLevel, PlayerSetup
 } from './types';
 import {
   INITIAL_PLAYERS, BOARD_SPACES, BOARD_SIZE, FAST_TRACK_SPACES,
   OPPORTUNITY_CARDS, DOODAD_CARDS, FAST_TRACK_OPPORTUNITIES, FAST_TRACK_DOODADS,
   LIFE_GOALS, CHARITY_CARDS, SUPPORT_OPTIONS, DIFFICULTY_SETTINGS, AI_DIALOGS, RANDOM_EVENTS,
-  MARKET_CARDS
+  MARKET_CARDS, CHARACTER_TEMPLATES, AI_BEHAVIORS, JOB_CARDS
 } from './constants';
 import { GameBoard } from './components/GameBoard';
 import { FinancialSheet } from './components/FinancialSheet';
@@ -39,6 +39,49 @@ const applyDifficultyToGoals = (goals: LifeGoal[], difficulty: DifficultyLevel):
   }));
 };
 
+// Create players from setup configuration
+const createPlayersFromSetup = (playerSetups: PlayerSetup[], difficulty: DifficultyLevel, goals: LifeGoal[]): Player[] => {
+  const settings = DIFFICULTY_SETTINGS.find(d => d.id === difficulty)!;
+
+  return playerSetups
+    .filter(setup => setup.isActive && setup.jobId && setup.goalId)
+    .map((setup, index) => {
+      const template = CHARACTER_TEMPLATES.find(c => c.id === setup.characterId)!;
+      const job = JOB_CARDS.find(j => j.id === setup.jobId)!;
+      const goal = goals.find(g => g.id === setup.goalId) || null;
+      const aiBehavior = AI_BEHAVIORS[job.aiBehaviorKey] || AI_BEHAVIORS.balanced;
+
+      return {
+        id: `p${index + 1}`,
+        name: template.name,
+        type: setup.isHuman ? 'HUMAN' : 'AI',
+        avatar: template.avatar,
+        cash: Math.floor(job.startingCash * settings.startingCashMultiplier),
+        jobTitle: job.title,
+        salary: job.salary,
+        aiBehavior: setup.isHuman ? undefined : aiBehavior,
+        assets: [],
+        liabilities: [...job.liabilities],
+        dreams: [],
+        monthlyExpenses: Math.floor(job.monthlyExpenses * settings.expenseMultiplier),
+        passiveIncome: job.passiveIncome,
+        hasEscaped: false,
+        position: 0,
+        selectedGoal: goal,
+        charityTurnsRemaining: 0,
+        supportBonus: 0,
+      } as Player;
+    });
+};
+
+// Default player setup - 1 human + 3 AI (no job/goal selected yet)
+const DEFAULT_PLAYER_SETUPS: PlayerSetup[] = [
+  { characterId: 'char1', isActive: true, isHuman: true, goalId: null, jobId: null },
+  { characterId: 'char2', isActive: true, isHuman: false, goalId: null, jobId: null },
+  { characterId: 'char3', isActive: true, isHuman: false, goalId: null, jobId: null },
+  { characterId: 'char4', isActive: true, isHuman: false, goalId: null, jobId: null },
+];
+
 export default function App() {
   // --- Game State ---
   const [gameState, setGameState] = useState<GameState>({
@@ -54,11 +97,15 @@ export default function App() {
     coachMessage: null,
     difficulty: 'teen',
     goalSelectingPlayerIndex: 0,
+    jobSelectingPlayerIndex: 0,
     supportTargetId: null,
     supportType: null,
     supportRequest: null,
     eventMessage: null,
   });
+
+  // Player setup state (for selecting players before game starts)
+  const [playerSetups, setPlayerSetups] = useState<PlayerSetup[]>(DEFAULT_PLAYER_SETUPS);
 
   // AI speech bubble state
   const [aiSpeech, setAiSpeech] = useState<{ name: string; message: string } | null>(null);
@@ -171,78 +218,163 @@ export default function App() {
     setTimeout(() => setAiSpeech(null), 2500);
   };
 
-  // Set difficulty and start game
+  // Set difficulty and go to player selection
   const selectDifficulty = (difficulty: DifficultyLevel) => {
-    const adjustedPlayers = applyDifficultyToPlayers(JSON.parse(JSON.stringify(INITIAL_PLAYERS)), difficulty);
     setGameState(prev => ({
       ...prev,
       difficulty,
-      players: adjustedPlayers,
+      phase: 'PLAYER_SELECT',
+    }));
+  };
+
+  // Toggle player active state
+  const togglePlayerActive = (characterId: string) => {
+    setPlayerSetups(prev => {
+      const activeCount = prev.filter(p => p.isActive).length;
+      const target = prev.find(p => p.characterId === characterId);
+
+      // Must have at least 1 player
+      if (target?.isActive && activeCount <= 1) return prev;
+
+      return prev.map(p =>
+        p.characterId === characterId ? { ...p, isActive: !p.isActive } : p
+      );
+    });
+  };
+
+  // Toggle player type (human/AI)
+  const togglePlayerType = (characterId: string) => {
+    setPlayerSetups(prev =>
+      prev.map(p =>
+        p.characterId === characterId ? { ...p, isHuman: !p.isHuman } : p
+      )
+    );
+  };
+
+  // Go to goal selection phase
+  const goToGoalSelect = () => {
+    setGameState(prev => ({
+      ...prev,
       phase: 'GOAL_SELECT',
       goalSelectingPlayerIndex: 0,
     }));
   };
 
-  const startGoalSelection = () => {
-    setGameState(prev => ({ ...prev, phase: 'GOAL_SELECT', goalSelectingPlayerIndex: 0 }));
+  // Select goal for current player (during setup)
+  const selectGoalForSetup = (goalId: string) => {
+    const activeSetups = playerSetups.filter(p => p.isActive);
+    const currentIndex = gameState.goalSelectingPlayerIndex;
+    const currentSetup = activeSetups[currentIndex];
+
+    // Update player setup with selected goal
+    setPlayerSetups(prev =>
+      prev.map(p =>
+        p.characterId === currentSetup.characterId ? { ...p, goalId } : p
+      )
+    );
+
+    const template = CHARACTER_TEMPLATES.find(c => c.id === currentSetup.characterId)!;
+    const goal = adjustedGoals.find(g => g.id === goalId)!;
+    addLog(`${template.name}は「${goal.title}」を人生の目標に選びました！`);
+
+    // Move to next player or job selection
+    const nextIndex = currentIndex + 1;
+    if (nextIndex >= activeSetups.length) {
+      setGameState(prev => ({
+        ...prev,
+        phase: 'JOB_SELECT',
+        goalSelectingPlayerIndex: 0,
+        jobSelectingPlayerIndex: 0,
+      }));
+    } else {
+      setGameState(prev => ({
+        ...prev,
+        goalSelectingPlayerIndex: nextIndex,
+      }));
+    }
+  };
+
+  // Select job for current player (during setup)
+  const selectJobForSetup = (jobId: string) => {
+    const activeSetups = playerSetups.filter(p => p.isActive);
+    const currentIndex = gameState.jobSelectingPlayerIndex;
+    const currentSetup = activeSetups[currentIndex];
+
+    // Update player setup with selected job
+    setPlayerSetups(prev =>
+      prev.map(p =>
+        p.characterId === currentSetup.characterId ? { ...p, jobId } : p
+      )
+    );
+
+    const template = CHARACTER_TEMPLATES.find(c => c.id === currentSetup.characterId)!;
+    const job = JOB_CARDS.find(j => j.id === jobId)!;
+    addLog(`${template.name}は「${job.title}」の仕事を選びました！`);
+
+    // Move to next player or start game
+    const nextIndex = currentIndex + 1;
+    if (nextIndex >= activeSetups.length) {
+      // All selections complete - create players and start game
+      // Need to use updated playerSetups, so we'll do it in the next tick
+      setTimeout(() => startGameWithAllSelections(jobId, currentSetup.characterId), 100);
+    } else {
+      setGameState(prev => ({
+        ...prev,
+        jobSelectingPlayerIndex: nextIndex,
+      }));
+    }
+  };
+
+  // Start game after all selections are complete
+  const startGameWithAllSelections = (lastJobId: string, lastCharId: string) => {
+    // Apply the last job selection
+    const finalSetups = playerSetups.map(p =>
+      p.characterId === lastCharId ? { ...p, jobId: lastJobId } : p
+    );
+    const players = createPlayersFromSetup(finalSetups, gameState.difficulty, adjustedGoals);
+    setGameState(prev => ({
+      ...prev,
+      players,
+      phase: 'ROLL',
+      goalSelectingPlayerIndex: 0,
+      jobSelectingPlayerIndex: 0,
+    }));
+    addLog('全員の準備が整いました！ゲーム開始！');
   };
 
   // Get adjusted goals based on difficulty
   const adjustedGoals = applyDifficultyToGoals(LIFE_GOALS, gameState.difficulty);
 
-  const selectGoal = (goal: LifeGoal) => {
-    setGameState(prev => {
-      const updatedPlayers = [...prev.players];
-      const selectingPlayer = updatedPlayers[prev.goalSelectingPlayerIndex];
-      selectingPlayer.selectedGoal = goal;
-
-      addLog(`${selectingPlayer.name}は「${goal.title}」を人生の目標に選びました！`);
-
-      const nextIndex = prev.goalSelectingPlayerIndex + 1;
-      if (nextIndex >= prev.players.length) {
-        // All players have selected, start the game
-        return {
-          ...prev,
-          players: updatedPlayers,
-          phase: 'ROLL',
-          goalSelectingPlayerIndex: 0,
-        };
-      }
-
-      return {
-        ...prev,
-        players: updatedPlayers,
-        goalSelectingPlayerIndex: nextIndex,
-      };
-    });
-  };
-
-  // AI auto-selects goal (with personality influence)
+  // AI auto-selects goal (during setup)
   useEffect(() => {
     if (gameState.phase === 'GOAL_SELECT') {
-      const selectingPlayer = gameState.players[gameState.goalSelectingPlayerIndex];
-      if (selectingPlayer && selectingPlayer.type === 'AI') {
+      const activeSetups = playerSetups.filter(p => p.isActive);
+      const currentSetup = activeSetups[gameState.goalSelectingPlayerIndex];
+      if (currentSetup && !currentSetup.isHuman) {
         setTimeout(() => {
           const goals = applyDifficultyToGoals(LIFE_GOALS, gameState.difficulty);
-          // AI personality influences goal choice
-          const behavior = selectingPlayer.aiBehavior;
-          let selectedGoal;
-          if (behavior?.personality === 'aggressive' || behavior?.personality === 'gambler') {
-            // Pick more expensive goals
-            const expensiveGoals = [...goals].sort((a, b) => b.requiredCash - a.requiredCash);
-            selectedGoal = expensiveGoals[Math.floor(Math.random() * 2)]; // Top 2 expensive
-          } else if (behavior?.personality === 'cautious') {
-            // Pick cheaper goals
-            const cheapGoals = [...goals].sort((a, b) => a.requiredCash - b.requiredCash);
-            selectedGoal = cheapGoals[Math.floor(Math.random() * 2)]; // Top 2 cheap
-          } else {
-            selectedGoal = goals[Math.floor(Math.random() * goals.length)];
-          }
-          selectGoal(selectedGoal);
+          // Random goal for AI
+          const selectedGoal = goals[Math.floor(Math.random() * goals.length)];
+          selectGoalForSetup(selectedGoal.id);
         }, 1000);
       }
     }
-  }, [gameState.phase, gameState.goalSelectingPlayerIndex]);
+  }, [gameState.phase, gameState.goalSelectingPlayerIndex, playerSetups]);
+
+  // AI auto-selects job (during setup)
+  useEffect(() => {
+    if (gameState.phase === 'JOB_SELECT') {
+      const activeSetups = playerSetups.filter(p => p.isActive);
+      const currentSetup = activeSetups[gameState.jobSelectingPlayerIndex];
+      if (currentSetup && !currentSetup.isHuman) {
+        setTimeout(() => {
+          // Random job for AI
+          const selectedJob = JOB_CARDS[Math.floor(Math.random() * JOB_CARDS.length)];
+          selectJobForSetup(selectedJob.id);
+        }, 1000);
+      }
+    }
+  }, [gameState.phase, gameState.jobSelectingPlayerIndex, playerSetups]);
 
   const restartGame = () => {
     setGameState({
@@ -258,10 +390,12 @@ export default function App() {
       coachMessage: null,
       difficulty: 'teen',
       goalSelectingPlayerIndex: 0,
+      jobSelectingPlayerIndex: 0,
       supportTargetId: null,
       supportType: null,
       eventMessage: null,
     });
+    setPlayerSetups(DEFAULT_PLAYER_SETUPS);
     setAiSpeech(null);
   };
 
@@ -1137,18 +1271,127 @@ export default function App() {
     );
   }
 
+  // --- PLAYER SELECTION ---
+  if (gameState.phase === 'PLAYER_SELECT') {
+    const activePlayerCount = playerSetups.filter(p => p.isActive).length;
+    const humanPlayerCount = playerSetups.filter(p => p.isActive && p.isHuman).length;
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-400 to-purple-500 p-4">
+        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-lg w-full">
+          <div className="text-center mb-4">
+            <div className="text-4xl mb-2">👥</div>
+            <h2 className="text-xl font-bold text-slate-800 mb-1">プレイヤー設定</h2>
+            <p className="text-slate-500 text-sm">参加するプレイヤーを選んでね（1〜4人）</p>
+          </div>
+
+          {/* Player Cards */}
+          <div className="space-y-3 mb-5">
+            {CHARACTER_TEMPLATES.map(template => {
+              const setup = playerSetups.find(p => p.characterId === template.id)!;
+              return (
+                <div
+                  key={template.id}
+                  className={`p-3 rounded-xl border-2 transition-all ${
+                    setup.isActive
+                      ? 'border-indigo-400 bg-indigo-50'
+                      : 'border-slate-200 bg-slate-50 opacity-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {/* Toggle Active */}
+                      <button
+                        onClick={() => togglePlayerActive(template.id)}
+                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
+                          setup.isActive
+                            ? 'border-green-500 bg-green-500 text-white'
+                            : 'border-slate-300 bg-white text-slate-300'
+                        }`}
+                      >
+                        {setup.isActive ? '✓' : ''}
+                      </button>
+
+                      {/* Avatar & Name */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{template.avatar}</span>
+                        <div>
+                          <div className="font-bold text-sm text-slate-700">{template.name}</div>
+                          <div className="text-[10px] text-slate-500">{template.jobTitle}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Human/AI Toggle */}
+                    {setup.isActive && (
+                      <button
+                        onClick={() => togglePlayerType(template.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          setup.isHuman
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-amber-500 text-white'
+                        }`}
+                      >
+                        {setup.isHuman ? '👤 人間' : '🤖 AI'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Summary */}
+          <div className="bg-slate-100 p-3 rounded-lg mb-4 text-center">
+            <div className="flex justify-center gap-6 text-sm">
+              <span className="text-slate-600">
+                <span className="font-bold text-indigo-600">{activePlayerCount}</span> 人参加
+              </span>
+              <span className="text-slate-600">
+                👤 <span className="font-bold text-blue-600">{humanPlayerCount}</span> 人
+              </span>
+              <span className="text-slate-600">
+                🤖 <span className="font-bold text-amber-600">{activePlayerCount - humanPlayerCount}</span> 人
+              </span>
+            </div>
+          </div>
+
+          {/* Start Button */}
+          <Button
+            size="lg"
+            onClick={goToGoalSelect}
+            disabled={activePlayerCount < 1}
+            className="w-full"
+          >
+            次へ：目標を決める 🎯
+          </Button>
+
+          {/* Back Button */}
+          <button
+            onClick={() => setGameState(prev => ({ ...prev, phase: 'SETUP' }))}
+            className="w-full mt-2 text-sm text-slate-500 hover:text-slate-700"
+          >
+            ← 難易度選択に戻る
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // --- GOAL SELECTION ---
   if (gameState.phase === 'GOAL_SELECT') {
-    const selectingPlayer = gameState.players[gameState.goalSelectingPlayerIndex];
-    const isHumanSelecting = selectingPlayer?.type === 'HUMAN';
+    const activeSetups = playerSetups.filter(p => p.isActive);
+    const currentSetup = activeSetups[gameState.goalSelectingPlayerIndex];
+    const currentTemplate = CHARACTER_TEMPLATES.find(c => c.id === currentSetup?.characterId);
+    const isHumanSelecting = currentSetup?.isHuman;
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-400 to-pink-500 p-4">
         <div className="bg-white p-6 rounded-2xl shadow-xl max-w-xl w-full">
           <div className="text-center mb-4">
-            <div className="text-5xl mb-2">{selectingPlayer?.avatar}</div>
+            <div className="text-5xl mb-2">{currentTemplate?.avatar}</div>
             <h2 className="text-xl font-bold text-slate-800 mb-1">
-              {selectingPlayer?.name}の人生の目標
+              {currentTemplate?.name}の人生の目標
             </h2>
             <p className="text-slate-500 text-sm">投資家コースでこの目標を達成すると勝利！</p>
           </div>
@@ -1158,7 +1401,7 @@ export default function App() {
               {adjustedGoals.map(goal => (
                 <button
                   key={goal.id}
-                  onClick={() => selectGoal(goal)}
+                  onClick={() => selectGoalForSetup(goal.id)}
                   className="p-3 border-2 border-slate-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all text-left group"
                 >
                   <div className="flex items-center gap-2 mb-1">
@@ -1175,24 +1418,96 @@ export default function App() {
           ) : (
             <div className="text-center py-6">
               <div className="animate-bounce text-4xl mb-3">🎯</div>
-              <p className="text-slate-500 text-sm">{selectingPlayer?.name}が目標を選んでいます...</p>
+              <p className="text-slate-500 text-sm">{currentTemplate?.name}が目標を選んでいます...</p>
             </div>
           )}
 
           {/* Progress indicator */}
           <div className="mt-4 flex justify-center gap-1">
-            {gameState.players.map((p, i) => (
-              <div
-                key={p.id}
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${
-                  i < gameState.goalSelectingPlayerIndex ? 'bg-green-100 text-green-600' :
-                  i === gameState.goalSelectingPlayerIndex ? 'bg-purple-100 ring-2 ring-purple-400' :
-                  'bg-slate-100 text-slate-400'
-                }`}
-              >
-                {i < gameState.goalSelectingPlayerIndex ? '✓' : p.avatar}
-              </div>
-            ))}
+            {activeSetups.map((setup, i) => {
+              const template = CHARACTER_TEMPLATES.find(c => c.id === setup.characterId);
+              return (
+                <div
+                  key={setup.characterId}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${
+                    i < gameState.goalSelectingPlayerIndex ? 'bg-green-100 text-green-600' :
+                    i === gameState.goalSelectingPlayerIndex ? 'bg-purple-100 ring-2 ring-purple-400' :
+                    'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  {i < gameState.goalSelectingPlayerIndex ? '✓' : template?.avatar}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- JOB SELECTION ---
+  if (gameState.phase === 'JOB_SELECT') {
+    const activeSetups = playerSetups.filter(p => p.isActive);
+    const currentSetup = activeSetups[gameState.jobSelectingPlayerIndex];
+    const currentTemplate = CHARACTER_TEMPLATES.find(c => c.id === currentSetup?.characterId);
+    const isHumanSelecting = currentSetup?.isHuman;
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-400 to-cyan-500 p-4">
+        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-xl w-full">
+          <div className="text-center mb-4">
+            <div className="text-5xl mb-2">{currentTemplate?.avatar}</div>
+            <h2 className="text-xl font-bold text-slate-800 mb-1">
+              {currentTemplate?.name}の職業を選ぼう
+            </h2>
+            <p className="text-slate-500 text-sm">職業によって給料や支出が変わるよ！</p>
+          </div>
+
+          {isHumanSelecting ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
+              {JOB_CARDS.map(job => (
+                <button
+                  key={job.id}
+                  onClick={() => selectJobForSetup(job.id)}
+                  className="p-3 border-2 border-slate-200 rounded-xl hover:border-teal-400 hover:bg-teal-50 transition-all text-left group"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-2xl">{job.icon}</span>
+                    <h3 className="font-bold text-sm text-slate-800 group-hover:text-teal-600">{job.title}</h3>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-2">{job.description}</p>
+                  <div className="flex flex-wrap gap-2 text-[10px]">
+                    <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded">給料: ¥{job.salary.toLocaleString()}</span>
+                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded">支出: ¥{job.monthlyExpenses.toLocaleString()}</span>
+                    <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">初期資金: ¥{job.startingCash.toLocaleString()}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-6">
+              <div className="animate-bounce text-4xl mb-3">💼</div>
+              <p className="text-slate-500 text-sm">{currentTemplate?.name}が職業を選んでいます...</p>
+            </div>
+          )}
+
+          {/* Progress indicator */}
+          <div className="mt-4 flex justify-center gap-1">
+            {activeSetups.map((setup, i) => {
+              const template = CHARACTER_TEMPLATES.find(c => c.id === setup.characterId);
+              return (
+                <div
+                  key={setup.characterId}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${
+                    i < gameState.jobSelectingPlayerIndex ? 'bg-green-100 text-green-600' :
+                    i === gameState.jobSelectingPlayerIndex ? 'bg-teal-100 ring-2 ring-teal-400' :
+                    'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  {i < gameState.jobSelectingPlayerIndex ? '✓' : template?.avatar}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
