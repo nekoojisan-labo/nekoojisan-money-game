@@ -112,6 +112,7 @@ export interface PlayerSetup {
   characterId: string;
   isActive: boolean;  // Whether this player is in the game
   isHuman: boolean;   // true = human, false = AI
+  customName: string; // Custom name for the player
   goalId: string | null; // Selected life goal ID
   jobId: string | null; // Selected job card ID
 }
