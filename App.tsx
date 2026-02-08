@@ -312,9 +312,10 @@ export default function App() {
     setDrawnJobId(randomJob.id);
   };
 
-  // Confirm the drawn job card
-  const confirmDrawnJob = () => {
-    if (!drawnJobId) return;
+  // Confirm the drawn job card (accepts optional jobId for AI auto-selection)
+  const confirmDrawnJob = (overrideJobId?: string) => {
+    const jobIdToUse = overrideJobId || drawnJobId;
+    if (!jobIdToUse) return;
 
     const activeSetups = playerSetups.filter(p => p.isActive);
     const currentIndex = gameState.jobSelectingPlayerIndex;
@@ -323,11 +324,11 @@ export default function App() {
     // Update player setup with drawn job
     setPlayerSetups(prev =>
       prev.map(p =>
-        p.characterId === currentSetup.characterId ? { ...p, jobId: drawnJobId } : p
+        p.characterId === currentSetup.characterId ? { ...p, jobId: jobIdToUse } : p
       )
     );
 
-    const job = JOB_CARDS.find(j => j.id === drawnJobId)!;
+    const job = JOB_CARDS.find(j => j.id === jobIdToUse)!;
     addLog(`${currentSetup.customName}は「${job.title}」のカードを引きました！`);
 
     // Reset drawn card and move to next player or start game
@@ -335,7 +336,7 @@ export default function App() {
     const nextIndex = currentIndex + 1;
     if (nextIndex >= activeSetups.length) {
       // All selections complete - create players and start game
-      setTimeout(() => startGameWithAllSelections(drawnJobId, currentSetup.characterId), 100);
+      setTimeout(() => startGameWithAllSelections(jobIdToUse, currentSetup.characterId), 100);
     } else {
       setGameState(prev => ({
         ...prev,
@@ -390,9 +391,9 @@ export default function App() {
         setTimeout(() => {
           const randomJob = JOB_CARDS[Math.floor(Math.random() * JOB_CARDS.length)];
           setDrawnJobId(randomJob.id);
-          // Auto-confirm after a short delay
+          // Auto-confirm after a short delay, passing jobId directly to avoid state timing issues
           setTimeout(() => {
-            confirmDrawnJob();
+            confirmDrawnJob(randomJob.id);
           }, 1500);
         }, 1000);
       }
