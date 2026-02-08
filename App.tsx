@@ -6,7 +6,7 @@ import {
   INITIAL_PLAYERS, BOARD_SPACES, BOARD_SIZE, FAST_TRACK_SPACES,
   OPPORTUNITY_CARDS, DOODAD_CARDS, FAST_TRACK_OPPORTUNITIES, FAST_TRACK_DOODADS,
   LIFE_GOALS, CHARITY_CARDS, SUPPORT_OPTIONS, DIFFICULTY_SETTINGS, AI_DIALOGS, RANDOM_EVENTS,
-  MARKET_CARDS, CHARACTER_TEMPLATES, AI_BEHAVIORS, JOB_CARDS
+  MARKET_CARDS, CHARACTER_TEMPLATES, AI_BEHAVIORS, JOB_CARDS, LOAN_SETTINGS
 } from './constants';
 import { GameBoard } from './components/GameBoard';
 import { FinancialSheet } from './components/FinancialSheet';
@@ -70,6 +70,7 @@ const createPlayersFromSetup = (playerSetups: PlayerSetup[], difficulty: Difficu
         selectedGoal: goal,
         charityTurnsRemaining: 0,
         supportBonus: 0,
+        bankLoan: 0,
       } as Player;
     });
 };
@@ -102,6 +103,7 @@ export default function App() {
     supportType: null,
     supportRequest: null,
     eventMessage: null,
+    hasActedThisTurn: false,
   });
 
   // Player setup state (for selecting players before game starts)
@@ -185,6 +187,16 @@ export default function App() {
         player.charityTurnsRemaining--;
       }
 
+      // Apply interest to bank loans
+      if (player.bankLoan > 0) {
+        const loanSettings = LOAN_SETTINGS[prev.difficulty];
+        const interest = Math.floor(player.bankLoan * loanSettings.interestRate);
+        player.bankLoan += interest;
+        if (interest > 0) {
+          addLog(`💳 ${player.name}のローン利息: +¥${interest.toLocaleString()} (残高: ¥${player.bankLoan.toLocaleString()})`);
+        }
+      }
+
       // Double-check escape condition at turn end
       if (checkEscapeCondition(player)) {
         player.hasEscaped = true;
@@ -194,17 +206,23 @@ export default function App() {
 
       const nextIndex = (currentIdx + 1) % prev.players.length;
       const nextTurnCount = nextIndex === 0 ? prev.turnCount + 1 : prev.turnCount;
+
+      // Check if next player has negative cash - go to DEBT phase
+      const nextPlayer = updatedPlayers[nextIndex];
+      const nextPhase = nextPlayer.cash < 0 ? 'DEBT' : 'ROLL';
+
       return {
         ...prev,
         players: updatedPlayers,
         currentPlayerIndex: nextIndex,
         turnCount: nextTurnCount,
-        phase: 'ROLL',
+        phase: nextPhase,
         currentCard: null,
         diceRoll: null,
         coachMessage: null,
         supportTargetId: null,
         supportType: null,
+        hasActedThisTurn: false,
       };
     });
   };
@@ -435,7 +453,9 @@ export default function App() {
       jobSelectingPlayerIndex: 0,
       supportTargetId: null,
       supportType: null,
+      supportRequest: null,
       eventMessage: null,
+      hasActedThisTurn: false,
     });
     setPlayerSetups(DEFAULT_PLAYER_SETUPS);
     setAiSpeech(null);
@@ -772,6 +792,13 @@ export default function App() {
   const handleJointPurchaseSelect = (product: GameCard) => {
     if (!currentPlayer) return;
 
+    // Check if already acted this turn
+    if (gameState.hasActedThisTurn) {
+      addLog('このターンは既にアクションを実行しました。');
+      setShowJointPurchaseModal(false);
+      return;
+    }
+
     const cost = product.cost || 0;
     const cashflow = product.cashflow || 0;
     const shortage = Math.max(0, cost - currentPlayer.cash);
@@ -857,7 +884,7 @@ export default function App() {
           player.position = 0;
         }
 
-        return { ...prev, players: updatedPlayers };
+        return { ...prev, players: updatedPlayers, hasActedThisTurn: true };
       });
 
       const contribNames = contributors.length > 0
@@ -876,10 +903,11 @@ export default function App() {
         showAiSpeech(supporter.name, getRandomDialog('support'));
       }
 
-      // Close modal after showing result
+      // Close modal after showing result, then end turn
       setTimeout(() => {
         setShowJointPurchaseModal(false);
         setJointPurchaseResult(null);
+        setGameState(prev => ({ ...prev, phase: 'END_TURN' }));
       }, 2500);
     } else {
       // Failed - not enough contribution
@@ -895,6 +923,54 @@ export default function App() {
   const handleJointPurchase = () => {
     if (!gameState.currentCard) return;
     handleJointPurchaseSelect(gameState.currentCard);
+  };
+
+  // --- Debt/Loan Functions ---
+  const loanSettings = LOAN_SETTINGS[gameState.difficulty];
+
+  // Take a loan from the bank
+  const takeLoan = (amount: number) => {
+    if (!currentPlayer) return;
+
+    setGameState(prev => {
+      const updatedPlayers = [...prev.players];
+      const player = updatedPlayers[prev.currentPlayerIndex];
+      player.cash += amount;
+      player.bankLoan += amount;
+
+      // Check if still in debt
+      const nextPhase = player.cash < 0 ? 'DEBT' : 'ROLL';
+
+      return { ...prev, players: updatedPlayers, phase: nextPhase };
+    });
+
+    addLog(`💰 ${currentPlayer.name}は銀行から ¥${amount.toLocaleString()} を借りました。`);
+  };
+
+  // Repay loan
+  const repayLoan = (amount: number) => {
+    if (!currentPlayer || currentPlayer.bankLoan <= 0) return;
+
+    const repayAmount = Math.min(amount, currentPlayer.bankLoan, currentPlayer.cash);
+    if (repayAmount <= 0) return;
+
+    setGameState(prev => {
+      const updatedPlayers = [...prev.players];
+      const player = updatedPlayers[prev.currentPlayerIndex];
+      player.cash -= repayAmount;
+      player.bankLoan -= repayAmount;
+      return { ...prev, players: updatedPlayers };
+    });
+
+    addLog(`💳 ${currentPlayer.name}はローンを ¥${repayAmount.toLocaleString()} 返済しました。(残高: ¥${(currentPlayer.bankLoan - repayAmount).toLocaleString()})`);
+  };
+
+  // Calculate minimum loan needed to cover negative cash
+  const getMinLoanNeeded = () => {
+    if (!currentPlayer || currentPlayer.cash >= 0) return 0;
+    const deficit = Math.abs(currentPlayer.cash);
+    // Round up to nearest loan unit
+    return Math.ceil(deficit / loanSettings.loanUnit) * loanSettings.loanUnit;
   };
 
   // --- Support Actions (Fast Track helping Rat Race) ---
@@ -1228,6 +1304,16 @@ export default function App() {
             }
           } else {
             skipSupport();
+          }
+        }, aiThinkingTime);
+      } else if (gameState.phase === 'DEBT') {
+        // AI automatically takes minimum loan needed
+        setTimeout(() => {
+          const minLoan = getMinLoanNeeded();
+          if (minLoan > 0) {
+            takeLoan(minLoan);
+          } else {
+            setGameState(prev => ({ ...prev, phase: 'ROLL' }));
           }
         }, aiThinkingTime);
       } else if (gameState.phase === 'END_TURN') {
@@ -1611,6 +1697,84 @@ export default function App() {
           <Button size="lg" onClick={restartGame} className="w-full animate-pulse shadow-xl">
             もう一度遊ぶ
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- DEBT PHASE (Borrowing when cash is negative) ---
+  if (gameState.phase === 'DEBT') {
+    const minLoanNeeded = getMinLoanNeeded();
+    const loanOptions = [
+      minLoanNeeded,
+      minLoanNeeded + loanSettings.loanUnit,
+      minLoanNeeded + loanSettings.loanUnit * 2,
+    ].filter(amt => amt > 0);
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-400 to-orange-500 p-4">
+        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-md w-full">
+          <div className="text-center mb-4">
+            <div className="text-5xl mb-2">🏦</div>
+            <h2 className="text-xl font-bold text-red-600 mb-1">資金不足！</h2>
+            <p className="text-slate-500 text-sm">{currentPlayer?.name}の所持金がマイナスです</p>
+          </div>
+
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-slate-600 text-sm">現在の所持金:</span>
+              <span className="font-bold text-red-600">¥{currentPlayer?.cash.toLocaleString()}</span>
+            </div>
+            {currentPlayer && currentPlayer.bankLoan > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600 text-sm">現在のローン残高:</span>
+                <span className="font-bold text-orange-600">¥{currentPlayer.bankLoan.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">💡</span>
+              <span className="font-bold text-amber-700 text-sm">ローンの説明</span>
+            </div>
+            <p className="text-xs text-amber-800">{loanSettings.explanation}</p>
+            <p className="text-xs text-amber-600 mt-1">
+              利息: 毎ターン{Math.round(loanSettings.interestRate * 100)}%
+            </p>
+          </div>
+
+          {isHumanTurn ? (
+            <div className="space-y-2">
+              <p className="text-sm text-slate-600 text-center mb-2">借入額を選んでください:</p>
+              {loanOptions.map((amount, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => takeLoan(amount)}
+                  className={`w-full p-3 rounded-lg border-2 text-left transition-all ${
+                    idx === 0
+                      ? 'border-blue-400 bg-blue-50 hover:bg-blue-100'
+                      : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-800">¥{amount.toLocaleString()}</span>
+                    {idx === 0 && (
+                      <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">最小額</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    借入後の所持金: ¥{((currentPlayer?.cash || 0) + amount).toLocaleString()}
+                  </p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <div className="animate-spin text-3xl mb-2">🏦</div>
+              <p className="text-slate-500 text-sm">{currentPlayer?.name}がローンを検討中...</p>
+            </div>
+          )}
         </div>
       </div>
     );
