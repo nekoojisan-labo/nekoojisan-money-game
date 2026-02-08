@@ -1554,7 +1554,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  <Button size="lg" onClick={confirmDrawnJob} className="bg-teal-600 hover:bg-teal-700 w-full">
+                  <Button size="lg" onClick={() => drawnJobId && confirmDrawnJob(drawnJobId)} className="bg-teal-600 hover:bg-teal-700 w-full">
                     この職業でスタート！
                   </Button>
                 </div>
